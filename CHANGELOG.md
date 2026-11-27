@@ -19,6 +19,9 @@ What changed in Geez3DVTT, newest first.
 - **Drag props, levers and traps** to new squares.
 - **The GM can switch a light on or off** by clicking it or from its right-click menu.
 
+### Battlemaps
+- Alaris Castle (full) is saved in the new `.geezmap` format, in `battlemap/`.
+
 ### Saving
 - **Save Map** writes a `.geezmap` with everything except tokens and initiative; **Save Scene** writes a `.geezscene`
   with them too. Import loads either one exactly, keeping a copy of the table it replaces.
