@@ -1,4 +1,4 @@
-import { watch, read, put, patch } from "../store.js";
+import { watch, watchAt, read, put, patch } from "../store.js";
 import { S } from "./state.js";
 import { floatWindow, addBarButton } from "./ui.js";
 import { createDiceTray3D } from "./dice3d.js";
@@ -6,6 +6,7 @@ import { play } from "./fx/fx.js";
 
 let win, pool = [], modInput, nameInput, chips, history, rollButton, clearButton;
 let lastReady = false, seen = new Set(), historyItems = {};
+const companionItems = {};   // rolls made in companion.html since this page opened
 
 const css = () => {
   if (document.getElementById("dice-style")) return;
@@ -33,9 +34,9 @@ function renderPool() {
 }
 function renderHistory() {
   history.replaceChildren();
-  Object.values(historyItems).sort((a, b) => b.ts - a.ts).slice(0, 8).forEach((r) => {
+  Object.values({ ...historyItems, ...companionItems }).sort((a, b) => b.ts - a.ts).slice(0, 8).forEach((r) => {
     const line = document.createElement("div");
-    line.textContent = `${r.by || "Player"} rolled ${r.sub || fmt(r)} = ${r.total}${r.sub ? "" : ` (${r.dice.map((d) => d.result).join(", ")})`}`; history.append(line);
+    line.textContent = `${r.by || "Player"} rolled ${r.sub || fmt(r)} = ${r.total}${r.sub ? "" : ` (${(r.dice || []).map((d) => d.result).join(", ")})`}`; history.append(line);
   });
 }
 
@@ -89,7 +90,23 @@ function initWindow() {
   nameInput.onchange = () => { try { localStorage.setItem("vtt-name", nameInput.value.trim()); } catch {} };
   win.body.querySelectorAll("[data-die]").forEach((b) => b.onclick = () => { pool.push(Number(b.dataset.die)); renderPool(); }); rollButton.onclick = rollFromWindow; clearButton.onclick = () => { pool = []; modInput.value = 0; renderPool(); };
 }
+// GeezSheets publishes each character's latest companion.html roll at gmroll/gaia/<character>.
+function watchCompanion() {
+  let known = null;
+  watchAt("gmroll/gaia", (latest) => {
+    const first = !known; known ||= new Set();   // what is there on opening is old news
+    for (const [character, c] of Object.entries(latest || {})) {
+      const id = c?.id || (c?.ts && `${character}-${c.ts}`);   // older companions send no id and no dice
+      if (!id || known.has(id)) continue;
+      known.add(id); if (first) continue;
+      const dice = Object.values(c.dice || {}).map((d) => ({ sides: d.s, result: d.v }));
+      const r = { id, by: c.name || "Player", sub: c.label || "Roll", total: c.total, nat: c.nat, dice, mod: 0, ts: Date.now() };   // our clock, not the phone's
+      companionItems[r.id] = r; renderHistory(); if (dice.length) animateRoll(r); else win.show();
+    }
+  });
+}
 export function initDice() {
+  watchCompanion();
   css(); if (!win) initWindow(); const db = addBarButton({ quick: true, id: "dice", icon: "🎲", label: "Dice", title: "Dice", toggle: true, onClick: () => win.toggle() }); win.el.addEventListener("fwin-close", () => db.classList.remove("on"));
   watch("rolls/log", (v) => { historyItems = v || {}; renderHistory(); });
   watch("rolls/last", (r) => { if (!lastReady) { lastReady = true; return; } if (!r || seen.has(r.id) || Date.now() - r.ts > 15000) return; seen.add(r.id); historyItems[r.id] = r; renderHistory(); animateRoll(r); });

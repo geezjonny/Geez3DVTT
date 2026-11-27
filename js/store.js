@@ -19,6 +19,8 @@ const gaiaDb = () => gaiaP ||= import("./gaia-db.js").then(() => {
   let pc = null; try { pc = JSON.parse(localStorage.getItem("vtt-me"))?.id || null; } catch { /* none */ }
   return window.GeezGaiaDb("firebase", { gm: document.documentElement.dataset.role === "gm", pc });
 });
+// A live ref in the character database, for the paths companion.html listens on (geezvtt/live/<campaign>/...).
+export const gaiaRef = async (path) => (await gaiaDb()).ref(path);
 export const readAt = async (path) => isChar(path) ? (await (await gaiaDb()).ref(path).once("value")).val() : (await get(ref(db, path))).val();
 export const read = async (path) => (await get(ref(db, ROOT + path))).val();
 export const put = (path, value) => set(ref(db, ROOT + path), value);

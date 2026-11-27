@@ -284,6 +284,10 @@ async function buildTokenMenu(menu, id, done, alive) {
     const hb = document.createElement("button"); hb.textContent = t.hidden ? "Reveal to players" : "Hide from players";
     hb.addEventListener("click", () => { done(); put(`tokens/${id}/hidden`, t.hidden ? null : true); }); menu.append(hb);
   }
+  if (S.isGM) {   // pins the token for its player (grappled, restrained...); the GM can still drag it
+    const mb = document.createElement("button"); mb.textContent = t.frozen ? "Enable movement" : "Disable movement";
+    mb.addEventListener("click", () => { done(); put(`tokens/${id}/frozen`, t.frozen ? null : true); }); menu.append(mb);
+  }
   if (S.isGM) {   // hold a torch: lights the area around the token and clears fog as it moves
     const lb = document.createElement("button"); lb.textContent = t.torch ? "Light: put out torch" : "Light: hold torch";
     lb.addEventListener("click", () => { done(); put(`tokens/${id}/torch`, t.torch ? null : true); }); menu.append(lb);
@@ -323,6 +327,7 @@ async function buildTokenMenu(menu, id, done, alive) {
     const c = (await readAt(`characters/pcs/${pc.id}/combat`)) || {};
     if (c.hp_max && alive()) menu.children[1].textContent = `HP: ${c.hp_current ?? c.hp_max} / ${c.hp_max}${c.temp_hp ? ` (+${c.temp_hp} temp)` : ""}`;
   } catch (err) { console.warn("Could not read PC HP", err); }
+  if (!S.isGM) return;   // players have their sheet, inventory and equipment in companion.html
   if (pc && S.isGM && alive()) {   // GM: damage / heal the real sheet, live
     const w = document.createElement("div"); w.innerHTML = `<input type="number" min="1" value="1" style="width:3.5rem"> <button data-h="dmg">Damage</button> <button data-h="heal">Heal</button>`;
     w.addEventListener("click", async (ev) => {

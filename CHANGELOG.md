@@ -4,6 +4,13 @@ What changed in Geez3DVTT, newest first.
 
 ## 2026-11-26
 
+### Rolls and players
+- **Rolls made in `companion.html` now show on the table,** on the GM and player pages.
+- **Roll call has a button** (the megaphone in VTT Controls). It reaches the called characters' companions, brings their
+  results back and adds initiative results to the order.
+- **Disable movement:** the GM can right-click a token to stop its player walking it.
+- A player's right-click on a character no longer offers Inventory, Equipment or View sheet; those are in the companion.
+
 ### Props
 - **Every prop now has its own low-poly model** instead of a plain box, decals included. They are built in code, so there
   is still nothing extra to download.

@@ -16,7 +16,7 @@ export function initWalk({ myToken, onStart, onStop }) {
   const blocked = () => S.isGM || S.paused || S.combat;
   const round = (v) => Math.round(v * 10) / 10;
   function send() {
-    if (!me || !S.tokens[me.id]) return;
+    if (!me || !S.tokens[me.id] || S.tokens[me.id].frozen) return;
     me.mine.push(`${round(me.x)},${round(me.y)}`); if (me.mine.length > 40) me.mine.shift();
     sentAt = performance.now();
     patch({ [`tokens/${me.id}/x`]: round(me.x), [`tokens/${me.id}/y`]: round(me.y), ...(me.lv !== (S.tokens[me.id].lv ?? 0) ? { [`tokens/${me.id}/lv`]: me.lv } : {}) }).catch((e) => console.warn("move not saved", e));
@@ -36,7 +36,7 @@ export function initWalk({ myToken, onStart, onStop }) {
     raf = 0;
     const dt = Math.min(0.05, (now - last) / 1000); last = now;
     const id = blocked() ? null : myToken(), t = id && S.tokens[id];
-    if (!t) { held.clear(); me = null; return; }
+    if (!t || t.frozen) { held.clear(); me = null; return; }   // frozen: the GM disabled movement
     if (!me || me.id !== id) {
       me = { id, x: t.x, y: t.y, lv: t.lv ?? 0, mine: [] };
       me.exit = exitAt(S.map.props, me, me.lv);   // standing on stairs already: step off before they work again

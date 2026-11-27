@@ -6,7 +6,7 @@
 //     results: { <tokenId>: { name, total, detail, nat, dice: [{ s, v, drop? }], t } } }
 // A result is written once per token (first answer wins, through a transaction).
 // Initiative calls also drop the total into initiative/order/<tokenId>.
-import { watch, put, patch, read, readAt, txn } from "../store.js";
+import { watch, put, patch, read, readAt, txn, gaiaRef } from "../store.js";
 import { S } from "./state.js";
 import { floatWindow, addBarButton } from "./ui.js";
 import { rollDice } from "./dice.js";
@@ -168,7 +168,9 @@ async function answer(tid, o = {}) {
     return { by: name, total, nat: d20, sub: `${callTitle(call)}: ${bits.join(" ")}` };
   });
   if (!roll || !out || current?.id !== call.id) return;
-  const res = { name, total: out.total, detail: out.detail, nat: out.nat, dice: out.dice, t: Date.now() };
+  await submit(call, tid, { name, total: out.total, detail: out.detail, nat: out.nat, dice: out.dice, t: Date.now() });
+}
+async function submit(call, tid, res) {   // first answer wins, whether it was rolled here or in companion.html
   const ok = await txn(`rollcall/current/results/${tid}`, (cur) => (cur ? undefined : res));
   if (!ok) return;
   if (call.kind === "init") {
@@ -183,7 +185,7 @@ function wireCallWindow() {
     if (b.dataset.extra) { opt.extras[b.dataset.extra] = !opt.extras[b.dataset.extra]; render(); }
     else if (b.dataset.roll) { b.disabled = true; opt.other = parseInt(callWin.body.querySelector("[data-other]")?.value, 10) || 0; answer(b.dataset.roll, opt); }
     else if (b.dataset.for) { b.disabled = true; answer(b.dataset.for, {}); }
-    else if (b.hasAttribute("data-close") && S.isGM) put("rollcall/current/open", false);
+    else if (b.hasAttribute("data-close") && S.isGM) closeCall();
   });
   callWin.body.addEventListener("change", (e) => {
     if (e.target.matches("[data-bardic]")) { opt.bardicDie = +e.target.value; render(); }
@@ -223,11 +225,46 @@ function wireSetup() {
     else if (b.hasAttribute("data-send")) send();
   });
 }
+// ---- companion.html: players answer there, on their campaign's own live roll call (GM page only) -------------
+const report = (err) => { console.warn("Companion roll call failed", err); const t = document.getElementById("toast"); if (t) { t.textContent = "Could not reach the companions: " + err.message; t.style.display = "block"; setTimeout(() => (t.style.display = "none"), 4000); } };
+const companionCall = (campaign, path = "") => gaiaRef(`geezvtt/live/${campaign}/rollcall${path}`);
+function closeCall() {
+  for (const campaign of Object.keys(current?.companions || {})) companionCall(campaign, "/open").then((r) => r.set(false)).catch(report);
+  put("rollcall/current/open", false);
+}
+let followed = "", unfollow = [];
+function followCompanions(call) {
+  const id = S.isGM && call?.open ? call.id : "";
+  if (id === followed) return;
+  followed = id; unfollow.forEach((off) => off()); unfollow = [];
+  if (!id) return;
+  for (const [campaign, tokenOf] of Object.entries(call.companions || {})) companionCall(campaign).then((r) => {
+    if (followed !== id) return;
+    const take = (snap) => {
+      const theirs = snap.val(); if (theirs?.id !== id) return;
+      for (const [pc, res] of Object.entries(theirs.results || {})) {
+        const tid = tokenOf[pc]; if (!tid || current?.id !== id || current.results?.[tid]) continue;
+        submit(current, tid, { name: tokenName(tid), total: res.total, detail: res.detail, nat: res.nat ?? null, dice: res.dice, t: res.t || Date.now() }).catch(report);
+      }
+    };
+    r.on("value", take); unfollow.push(() => r.off("value", take));
+  }).catch(report);
+}
+
 // Open a roll call from code (the command console uses this). Same record the setup window writes.
-export const callRoll = ({ kind, key = "", title = "", dc = null, showDc = false, mode = "normal", tokenIds }) => put("rollcall/current", {
-  id: uid(), kind, key, title: title.trim(), dc: kind !== "init" && dc > 0 ? dc : null, showDc: !!showDc, mode,
-  to: Object.fromEntries(tokenIds.map((tid) => [tid, tokenName(tid)])), open: true, t: Date.now(), results: {},
-});
+export async function callRoll({ kind, key = "", title = "", dc = null, showDc = false, mode = "normal", tokenIds }) {
+  const call = { id: uid(), kind, key, title: title.trim(), dc: kind !== "init" && dc > 0 ? dc : null, showDc: !!showDc, mode, open: true, t: Date.now() };
+  const companions = {};   // { campaign: { character id: token id } }
+  try {
+    const sheets = (await readAt("characters/pcs")) || {};
+    for (const tid of tokenIds) { const pc = isPcToken(S.tokens[tid] || {}) ? await pcIdFor(tid) : null, campaign = sheets[pc]?.campaign; if (campaign) (companions[campaign] ||= {})[pc] = tid; }
+  } catch (err) { report(err); }
+  await put("rollcall/current", { ...call, companions, to: Object.fromEntries(tokenIds.map((tid) => [tid, tokenName(tid)])), results: {} });
+  for (const [campaign, tokenOf] of Object.entries(companions)) {
+    try { await (await companionCall(campaign)).set({ ...call, to: Object.fromEntries(Object.entries(tokenOf).map(([pc, tid]) => [pc, tokenName(tid)])) }); }
+    catch (err) { report(err); }
+  }
+}
 async function send() {
   const picked = [...setupWin.body.querySelectorAll(".rc-tk:checked")].map((c) => c.value);
   if (!picked.length) { const t = document.getElementById("toast"); if (t) { t.textContent = "Tick at least one token"; t.style.display = "block"; setTimeout(() => (t.style.display = "none"), 2500); } return; }
@@ -247,7 +284,7 @@ export function initRollCall() {
   document.addEventListener("tokenschanged", () => { if (current?.open) render(); });
   document.addEventListener("vttvisibilitychange", () => { if (current?.open) render(); });
   watch("rollcall/current", (value) => {
-    const first = !ready; ready = true; current = value || null;
+    const first = !ready; ready = true; current = value || null; followCompanions(current);
     if (!value?.open) { callWin.hide(); return; }
     const fresh = !seen.has(value.id) && (value.t || 0) > pageLoadedAt - 15000 && Date.now() - (value.t || 0) < 60000;
     if (first || fresh) { const wasSeen = seen.has(value.id); seen.add(value.id); if (!fresh && wasSeen) return; }
