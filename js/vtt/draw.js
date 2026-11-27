@@ -55,17 +55,18 @@ export function drawObjects() {
   }   // players never see hidden objects
   updateFogMask(); updateLightingMask(); S.refresh3d?.();
 }
+const mapBox = () => { const { cols, rows, x, y } = mapSize(); return { x: x * 40, y: y * 40, width: cols * 40, height: rows * 40 }; };
 function updateLightingMask() {
   const defs = $("#map defs"), old = document.getElementById("night-mask"); old?.remove(); document.getElementById("night-shade")?.remove(); defs.querySelectorAll('[id^="night-hole-"]').forEach((e) => e.remove());
   const darkness = darknessFor(S.atmosphere?.time ?? 12); if (!(darkness > 0)) return;
-  const { cols, rows } = mapSize(), mask = el("mask", { id: "night-mask", maskUnits: "userSpaceOnUse", x: 0, y: 0, width: cols * 40, height: rows * 40 }, defs);
-  el("rect", { x: 0, y: 0, width: cols * 40, height: rows * 40, fill: "white" }, mask);
+  const box = mapBox(), mask = el("mask", { id: "night-mask", maskUnits: "userSpaceOnUse", ...box }, defs);
+  el("rect", { ...box, fill: "white" }, mask);
   for (const o of Object.values(S.objects)) if ((o.lv ?? 0) === (S.level ?? S.map.level ?? 0) && o.kind === "light" && o.state === "on" && !o.hidden) {
     const gid = `night-hole-${o.x}-${o.y}`, g = el("radialGradient", { id: gid }, defs), p = lightIntensity(o) * darkness;
     [[0, 1 - p], [65, 1 - p * .7], [100, 1]].forEach(([offset, opacity]) => el("stop", { offset: `${offset}%`, "stop-color": `rgb(${Math.round(opacity * 255)},${Math.round(opacity * 255)},${Math.round(opacity * 255)})` }, g));
     el("circle", { cx: o.x, cy: o.y, r: o.radius || 120, fill: `url(#${gid})` }, mask);
   }
-  el("rect", { id: "night-shade", x: 0, y: 0, width: cols * 40, height: rows * 40, fill: "#10152a", opacity: darkness, mask: "url(#night-mask)", "pointer-events": "none" }, $("#map"));
+  el("rect", { id: "night-shade", ...box, fill: "#10152a", opacity: darkness, mask: "url(#night-mask)", "pointer-events": "none" }, $("#map"));
 }
 // Fog is carved out by lit lights (each light's own "fog" radius in cells).
 function updateFogMask() {
@@ -83,8 +84,8 @@ function updateFogMask() {
   }
   recordVisible(holes);
   if (holes.length) {
-    const { cols, rows } = mapSize(), m = el("mask", { id: "sightmask", maskUnits: "userSpaceOnUse", x: 0, y: 0, width: cols * 40, height: rows * 40 }, $("#map defs"));
-    el("rect", { x: 0, y: 0, width: cols * 40, height: rows * 40, fill: "#fff" }, m);
+    const box = mapBox(), m = el("mask", { id: "sightmask", maskUnits: "userSpaceOnUse", ...box }, $("#map defs"));
+    el("rect", { ...box, fill: "#fff" }, m);
     for (const [cx, cy, r, poly] of holes) { if (poly) el("path", { d: polygonPath(poly), fill: "#000" }, m); else el("circle", { cx, cy, r, fill: "#000" }, m); }
   }
   if (holes.length && !S.isGM) $("#fog").setAttribute("mask", "url(#sightmask)"); else $("#fog").removeAttribute("mask");
@@ -183,10 +184,10 @@ export function drawMap() {
     el("rect", { x: a.x, y: a.y, width: a.w, height: a.h, class: `roof ${a.mat ? "r-" + a.mat : ""} ${S.isGM ? "gm" : ""} ${a.open ? "open" : ""}`, "data-id": id }, r);
   }
   if (!S.isGM && S.map.exploredEnabled !== false) {
-    const { cols, rows } = mapSize();
+    const { cols, rows, x: x0, y: y0 } = mapSize();
     for (const cell of S.exploredCells || []) {
       const [x, y] = cell.split(",").map(Number);
-      if (x >= 0 && y >= 0 && x < cols && y < rows && !S.currentVisible?.has(cell)) el("rect", { x: x * 40, y: y * 40, width: 40, height: 40, class: "explored-memory" }, em);
+      if (x >= x0 && y >= y0 && x < x0 + cols && y < y0 + rows && !S.currentVisible?.has(cell)) el("rect", { x: x * 40, y: y * 40, width: 40, height: 40, class: "explored-memory" }, em);
     }
   }
   S.refresh3d?.();

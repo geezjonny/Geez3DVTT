@@ -17,7 +17,7 @@ let gaiaP = null;
 const isChar = (path) => /^characters\//.test(path);
 const gaiaDb = () => gaiaP ||= import("./gaia-db.js").then(() => {
   let pc = null; try { pc = JSON.parse(localStorage.getItem("vtt-me"))?.id || null; } catch { /* none */ }
-  return window.GeezGaiaDb("firebase", { gm: new URLSearchParams(location.search).has("gm"), pc });
+  return window.GeezGaiaDb("firebase", { gm: document.documentElement.dataset.role === "gm", pc });
 });
 export const readAt = async (path) => isChar(path) ? (await (await gaiaDb()).ref(path).once("value")).val() : (await get(ref(db, path))).val();
 export const read = async (path) => (await get(ref(db, ROOT + path))).val();

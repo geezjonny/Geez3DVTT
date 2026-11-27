@@ -176,7 +176,8 @@ async function resolve(tokenId, opt, targets, cell, hooks) {
 
 const css = `
 #map.aiming { cursor: crosshair; }
-#tokmenu { z-index: 20; }
+#atk-hint { position: fixed; z-index: 6; left: 50%; bottom: 18px; transform: translateX(-50%); padding: 6px 12px; pointer-events: none; }
+#atk-card { position: fixed; z-index: 7; left: 50%; bottom: 18px; transform: translateX(-50%); min-width: 280px; max-width: min(520px, 92vw); padding: 10px 12px; }
 #atk-ghost .atk-range { fill: none; stroke: #f3e7c8; stroke-width: 1.5; stroke-dasharray: 4 4; opacity: .7; }
 #atk-ghost .atk-line { stroke-width: 2; stroke-dasharray: 6 4; }
 #atk-ghost .atk-shape { fill-opacity: .28; stroke-width: 2; }
@@ -186,12 +187,9 @@ const css = `
 #atk-ghost .atk-target { fill: none; stroke: #ff5a3c; stroke-width: 3; }
 .token .turn-ring { fill: none; stroke: #ffd35c; stroke-width: 3; pointer-events: none; animation: turn-pulse 1.4s ease-in-out infinite; }
 @keyframes turn-pulse { 0%,100% { opacity: 1; stroke-width: 3; } 50% { opacity: .45; stroke-width: 5; } }
-#atk-hint { position: fixed; z-index: 6; left: 50%; bottom: 18px; transform: translateX(-50%); padding: 6px 12px; background: var(--leather-dk, #2b1d12); color: var(--paper, #f3e7c8); border: 2px solid var(--brass, #b98f45); border-radius: 4px; font: 14px Georgia, serif; pointer-events: none; }
-#atk-card { position: fixed; z-index: 7; left: 50%; bottom: 18px; transform: translateX(-50%); min-width: 280px; max-width: min(520px, 92vw); padding: 10px 12px; background: var(--paper, #f3e7c8); color: var(--ink, #1c1209); border: 2px solid var(--brass, #b98f45); border-radius: 4px; font: 15px Georgia, serif; box-shadow: 0 4px 16px #0008; }
 #atk-card .atk-big { font-weight: bold; margin: 5px 0 2px; }
-#atk-card .atk-hit { color: #2f7a46; font-weight: bold; } #atk-card .atk-miss { color: #a22; font-weight: bold; }
+#atk-card .atk-hit { color: #7ddc8c; font-weight: bold; } #atk-card .atk-miss { color: #ff8a8a; font-weight: bold; }
 #atk-card .atk-btns, #atk-card .atk-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 6px; }
-#atk-card button { font: inherit; padding: 2px 9px; border: 1px solid var(--brass, #b98f45); border-radius: 3px; background: var(--leather-dk, #2b1d12); color: var(--paper, #f3e7c8); cursor: pointer; }
 #atk-card button:disabled { opacity: .45; cursor: default; }
 #atk-card .atk-done { margin-left: auto; }
 `;

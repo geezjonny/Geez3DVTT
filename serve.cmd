@@ -22,4 +22,4 @@ echo GM:      http://127.0.0.1:%PORT%/gm.html
 echo Players: http://127.0.0.1:%PORT%/index.html
 echo Press Ctrl+C to stop.
 start "" http://127.0.0.1:%PORT%/gm.html
-%PYTHON% -m http.server %PORT% --bind 127.0.0.1
+%PYTHON% serve.py %PORT%

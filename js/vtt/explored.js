@@ -13,9 +13,9 @@ function inPoly(px, py, poly) {
   return inside;
 }
 
-export function visibleCells(holes, cols, rows, cellSize = CELL) {
+export function visibleCells(holes, cols, rows, cellSize = CELL, x0 = 0, y0 = 0) {
   const out = new Set();
-  for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) {
+  for (let y = y0; y < y0 + rows; y++) for (let x = x0; x < x0 + cols; x++) {
     const cx = x * cellSize + cellSize / 2, cy = y * cellSize + cellSize / 2;
     if ((holes || []).some(([hx, hy, radius, poly]) => Math.hypot(cx - hx, cy - hy) <= radius && (!poly || inPoly(cx, cy, poly)))) out.add(cellId(x, y));
   }
@@ -23,7 +23,7 @@ export function visibleCells(holes, cols, rows, cellSize = CELL) {
 }
 
 export function mergeCells(a, b) {
-  return new Set([...(a || []), ...(b || [])].filter((v) => /^\d+,\d+$/.test(String(v))));
+  return new Set([...(a || []), ...(b || [])].filter((v) => /^-?\d+,-?\d+$/.test(String(v))));
 }
 
 // v1|row:runs where a run is start-end (inclusive), e.g. v1|0:0-3,7;1:2.
@@ -31,7 +31,7 @@ export function encodeCells(cells) {
   const rows = new Map();
   for (const value of cells || []) {
     const [xs, ys] = String(value).split(","), x = Number(xs), y = Number(ys);
-    if (!Number.isInteger(x) || !Number.isInteger(y) || x < 0 || y < 0) continue;
+    if (!Number.isInteger(x) || !Number.isInteger(y)) continue;
     (rows.get(y) || rows.set(y, []).get(y)).push(x);
   }
   const out = [];
@@ -51,11 +51,11 @@ export function decodeCells(value) {
   const out = new Set();
   if (typeof value !== "string" || !value.startsWith("v1|")) return out;
   for (const row of value.slice(3).split(";")) {
-    const [ys, runs] = row.split(":"); if (!/^\d+$/.test(ys) || !runs) continue;
+    const [ys, runs] = row.split(":"); if (!/^-?\d+$/.test(ys) || !runs) continue;
     const y = Number(ys);
     for (const run of runs.split(",")) {
-      const bits = run.split("-"); if (!bits.every((v) => /^\d+$/.test(v))) continue;
-      const a = Number(bits[0]), b = Number(bits[1] ?? bits[0]);
+      const bits = /^(-?\d+)(?:-(-?\d+))?$/.exec(run); if (!bits) continue;
+      const a = Number(bits[1]), b = Number(bits[2] ?? bits[1]);
       if (b < a || b - a > 10000) continue;
       for (let x = a; x <= b; x++) out.add(cellId(x, y));
     }
@@ -63,4 +63,4 @@ export function decodeCells(value) {
   return out;
 }
 
-export const cellsForHoles = (holes, cols, rows) => visibleCells(holes, cols, rows);
+export const cellsForHoles = (holes, cols, rows, x0 = 0, y0 = 0) => visibleCells(holes, cols, rows, CELL, x0, y0);

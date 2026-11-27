@@ -15,7 +15,7 @@ function css() {
     #win-image-add .image-form label span { min-width:5rem; }
     #win-image-add .image-form input { box-sizing:border-box; width:100%; }
     #win-image-add .image-size { display:grid; grid-template-columns:1fr 1fr; gap:.45rem; }
-    #win-image-add .image-preview { display:block; width:100%; max-height:12rem; object-fit:contain; background:var(--leather-dk); border:1px solid var(--brass); }
+    #win-image-add .image-preview { display:block; width:100%; max-height:12rem; object-fit:contain; background:var(--panel); border:1px solid var(--line); }
     #win-image-add .image-error { min-height:1.1em; color:#a94c3d; }
     #win-image-add .image-actions { display:flex; justify-content:flex-end; gap:.5rem; }
   `;

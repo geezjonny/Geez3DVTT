@@ -14,13 +14,13 @@ const css = () => {
     #${TINT_ID}{position:fixed;inset:0;z-index:6;pointer-events:none;mix-blend-mode:multiply}
     #${CANVAS_ID}{position:fixed;inset:0;width:100%;height:100%;z-index:6;pointer-events:none}
     .atmo-presets,.atmo-weather,.atmo-swatches{display:flex;flex-wrap:wrap;gap:4px}
-    .atmo-clock{font-size:1.2rem;text-align:center;color:var(--brass-lt);margin:.25rem 0 .5rem}
-    .atmo-time{width:15rem;accent-color:var(--brass)}
+    .atmo-clock{font-size:1.2rem;text-align:center;color:var(--accent);margin:.25rem 0 .5rem}
+    .atmo-time{width:15rem;accent-color:var(--line)}
     .atmo-presets button,.atmo-weather button{flex:1;min-width:4.4rem}
     .atmo-weather button{font-size:1.05rem;padding:.6rem .35rem}
     .atmo-swatches{margin-top:.6rem;max-width:15rem}.atmo-swatches[hidden]{display:none}
-    .atmo-swatch{width:2rem;height:2rem;padding:0;border:2px solid var(--brass);border-radius:4px;cursor:pointer}
-    .atmo-custom{width:2.5rem;height:2rem;padding:0;border:1px solid var(--brass);background:var(--leather-dk)}
+    .atmo-swatch{width:2rem;height:2rem;padding:0;border:2px solid var(--line);border-radius:4px;cursor:pointer}
+    .atmo-custom{width:2.5rem;height:2rem;padding:0;border:1px solid var(--line);background:var(--panel)}
   `;
   document.head.append(style);
 };

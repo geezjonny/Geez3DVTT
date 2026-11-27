@@ -48,8 +48,8 @@ export function initWalk({ myToken, onStart, onStop }) {
     const dir = direction();
     let jumped = false;
     if (dir) {
-      const { cols, rows } = mapSize();
-      moveCircle(me, dir.x * SPEED * dt, dir.y * SPEED * dt, RADIUS, solidSegments(me.lv), cols * 40, rows * 40);
+      const { cols, rows, x, y } = mapSize();
+      moveCircle(me, dir.x * SPEED * dt, dir.y * SPEED * dt, RADIUS, solidSegments(me.lv), (x + cols) * 40, (y + rows) * 40, x * 40, y * 40);
       const exit = exitAt(S.map.props, me, me.lv);
       if (exit !== me.exit) {
         me.exit = exit;

@@ -1,35 +1,45 @@
-// GM map-building tools: the "+" menu, the tool bar, and drag/click handling for each tool.
+// GM map-building tools: the Build toolbar, its swatch windows, and drag/click handling for each tool.
 import { readAt } from "../store.js";
 import { put, patch } from "./undo.js";
 import { KINDS, newObject } from "../puzzle/index.js";
 import { $, S, cellOf, mapSize } from "./state.js";
 import { el, PROPS, PROP_CATALOG, drawObjects } from "./draw.js";
 import { renderPanel } from "./panel.js";
-import { floatWindow } from "./ui.js";
+import { floatWindow, addBarButton, toolbar, svg } from "./ui.js";
 import { generateDungeon } from "./gen.js";
 import { segmentDoors } from "./door-segment.js";
 import { LIGHT_MATS, LIGHT_DEFAULT, lightSettings, clampIntensity, lightIntensity } from "./light-types.js";
-import { recentTokenRefs, tokenInitials } from "./token-palette.js";
+import { recentTokenRefs, tokenInitials, TOKEN_BASE, tokenFileName, artFor } from "./token-palette.js";
+import { loadArt } from "./tokenpics.js";
+import { grown, MAX_CELLS } from "./bounds.js";
 import { applyElevation } from "./elevation.js";
 
-const MENU = [["token", "Token"], ["wall", "Wall"], ["door", "Door"], ["floor", "Floor"], ["roof", "Roof"], ["elevation", "Elevation"], ["fog", "Fog"], ["light", "Light"], ["object", "Object"], ["prop", "Prop"], ["label", "Label"], ["generator", "Generate dungeon"], ["puzzle", "Puzzle"]];
 const HINT = {
   token: "Click a cell to drop a token.", wall: "Drag to draw a wall (snaps to the grid).", floor: "Drag to paint a floor area.",
   fog: "Drag to fog a room (snaps to cells). Right-click fog to reveal it to players.", roof: "Drag to cover an area with a roof. Right-click a roof to lift it.", prop: "Click a cell to place it. Drag props to move them.",
-  erase: "Click anything to delete it.", label: "Click a cell to place a map label.", "obj:door": "Click or drag from one point to another to place doors.", "obj:light": "Click a cell to place a light.",
+  label: "Click a cell to place a map label.", "obj:door": "Click or drag from one point to another to place doors.", "obj:light": "Click a cell to place a light.",
 };
 export const WALL_MATS = ["stone", "ashlar", "marble", "brick", "fieldstone", "plaster", "timber", "wood", "palisade", "cave", "hedge", "earth", "cobble", "iron"];
 export const FLOOR_MATS = ["stone", "slab", "cobble", "marble", "tile", "wood", "carpet", "dirt", "cave", "sand", "grass", "snow", "water", "mud", "shallow", "ice", "lava", "swamp", "bone", "void", "gravel", "moss", "iron"];
 export const LIGHT_COLORS = Object.fromEntries(LIGHT_MATS.map((m) => [m.color, m.label]));
 const matSel = (list) => `<select data-o="mat"><option value="">default</option>${list.map((m) => `<option value="${m}">${m}</option>`).join("")}</select>`;
 let wallsAround = true;   // the Floors window's "Draw walls around it" box
-let curMat = "", curMode = "", eraseOnly = "", curElev = 5;   // floor flyout choices: material, shape/brush/bucket, floor-only erase
+let curMat = "", curMode = "", curElev = 5;   // the active window's choices
 const matOf = () => opt("mat")?.value || curMat;
-const FLOOR_ACTS = [["select", "Select"], ["erase", "Erase"], ["shape", "Shape"], ["brush", "Paint brush"], ["bucket", "Paint bucket"]];
 export const ROOF_MATS = ["thatch", "slate", "tile", "flat", "wood", "stone"];
 const FLOOR_COL = { thatch: "#c9a85c", slate: "#59636e", tile: "#b5532f", flat: "#77736c", wood: "#b88a52", stone: "#b5b2a8", slab: "#aaa69d", cobble: "#8f8a80", marble: "#d7d8d2", carpet: "#9a5364", dirt: "#856a4c", cave: "#635d61", iron: "#6f7882", gravel: "#a39a88", sand: "#e0cb8f", grass: "#8fae6a", snow: "#eef5f5", water: "#6aa3c2", mud: "#7a5f43", shallow: "#83b8c4", ice: "#cfe8f0", lava: "#d64b2f", swamp: "#64734b", bone: "#d8ceb0", void: "#252433", moss: "#718454", ashlar: "#9b9890", brick: "#9c5547", fieldstone: "#817c75", plaster: "#c8bca4", timber: "#80552e", palisade: "#69462c", hedge: "#50713f", earth: "#795b3f" };
 const uid = (p) => p + Date.now().toString(36) + Math.floor(Math.random() * 1296).toString(36);
-const vertex = (p) => { const { cols, rows } = mapSize(); return { x: Math.max(0, Math.min(cols * 40, Math.round(p.x / 40) * 40)), y: Math.max(0, Math.min(rows * 40, Math.round(p.y / 40) * 40)) }; };
+// Floors, walls and doors may be drawn past the edge (the map grows to hold them), up to MAX_CELLS a side.
+const span = () => { const { x, y, cols, rows } = mapSize(), sx = Math.max(0, MAX_CELLS - cols), sy = Math.max(0, MAX_CELLS - rows); return { x0: x - sx, y0: y - sy, x1: x + cols + sx, y1: y + rows + sy }; };
+const within = (v, a, b) => Math.max(a, Math.min(b, v));
+const vertex = (p) => { const s = span(); return { x: within(Math.round(p.x / 40), s.x0, s.x1) * 40, y: within(Math.round(p.y / 40), s.y0, s.y1) * 40 }; };
+const openCell = (p) => { const s = span(); return { x: within(Math.floor(p.x / 40), s.x0, s.x1 - 1) * 40 + 20, y: within(Math.floor(p.y / 40), s.y0, s.y1 - 1) * 40 + 20 }; };
+function patchGrowing(changes, a, b) {
+  const next = grown(mapSize(), a.x, a.y, b.x, b.y);
+  if (next) changes["map/size"] = next;
+  patch(changes);
+  if (next) S.map.size = next;   // after patch, so undo keeps the old size; before the echo, so the next wall sees it
+}
 const opt = (k) => $(`#toolbar [data-o="${k}"]`) || tokWin?.body.querySelector(`[data-o="${k}"]`) || kw.light?.body.querySelector(`[data-o="${k}"]`);
 // Build > Token: a floating window (like the floor/prop palettes) with a PC / NPC dropdown; then click the map to drop it.
 let tokWin = null;
@@ -46,7 +56,7 @@ function applyDungeon(body, replace) {
   const form = new FormData(body.querySelector("form")), d = generateDungeon({ width: form.get("width"), height: form.get("height"), roomCount: form.get("roomCount"), seed: form.get("seed"), corridorStyle: form.get("corridorStyle") });
   const occupied = Object.values(S.map.floors || {}).length || Object.values(S.map.walls || {}).length || Object.values(S.objects || {}).some((o) => o.kind === "door");
   if (replace && occupied && !confirm("Replace the existing floors, walls, and doors?")) return;
-  const stamp = `gen${Date.now().toString(36)}`, changes = { "map/size": { cols: Math.max(mapSize().cols, d.width), rows: Math.max(mapSize().rows, d.height) } };
+  const stamp = `gen${Date.now().toString(36)}`, changes = { "map/size": { ...mapSize(), cols: Math.max(mapSize().cols, d.width), rows: Math.max(mapSize().rows, d.height) } };
   if (replace) { Object.keys(S.map.floors || {}).forEach((id) => { changes[`map/floors/${id}`] = null; }); Object.keys(S.map.walls || {}).forEach((id) => { changes[`map/walls/${id}`] = null; }); Object.entries(S.objects || {}).filter(([, o]) => o.kind === "door").forEach(([id]) => { changes[`objects/${id}`] = null; }); }
   Object.entries(d.floors).forEach(([id, v]) => { changes[`map/floors/${stamp}-${id}`] = { ...v, lv: S.level ?? 0 }; });
   Object.entries(d.walls).forEach(([id, v]) => { changes[`map/walls/${stamp}-${id}`] = { ...v, lv: S.level ?? 0 }; });
@@ -58,14 +68,17 @@ function renderTokenWin() {
     tokWin = floatWindow({ id: "token-place", title: "Token", x: 20, y: 120, hidden: true });
     tokWin.body.className += " palkind token-palette";
     tokWin.body.innerHTML = `<div class="tok-recent" data-token-recent></div><select data-o="npc" data-token-more aria-label="More tokens"></select>
+      <label>/Token <select data-o="art"><option value="">Select image</option></select></label>
       <div class="tok-fields"><label>Name <input data-o="name" type="text" placeholder="auto"></label><label>HP <input data-o="hp" type="number" min="0" placeholder="blank = PC" title="Leave blank for a player token"></label>
       <label>Colour <input data-o="color" type="color" value="#c8871c"></label><label>Picture <input data-o="img" type="url" placeholder="image URL"></label></div>
       <div class="tok-hint">Click a cell on the map to drop it.</div></div>`;
     tokWin.body.addEventListener("change", (e) => {   // picking a PC / NPC fills in its name and HP
       if (e.target.dataset.o === "npc") selectToken(e.target.value);
+      if (e.target.dataset.o === "art") selectArt(e.target.value);
     });
     tokWin.body.addEventListener("click", (e) => { const b = e.target.closest("[data-token-ref]"); if (b) selectToken(b.dataset.tokenRef); });
     tokWin.el.addEventListener("fwin-close", () => { if (S.tool === "token") setTool(null); });
+    loadArt().then((files) => { artFiles = files; opt("art").append(...files.map((f) => new Option(tokenFileName(f), f))); });
   }
   const sel = tokWin.body.querySelector('[data-o="npc"]'), keep = sel.value;
   const all = [...(pcList || []).map((n) => ({ ...n, kind: "pc" })), ...(npcs || []).map((n) => ({ ...n, kind: n.enemy ? "enemy" : "npc" }))];
@@ -74,10 +87,15 @@ function renderTokenWin() {
   renderTokenRecents(all);
   tokWin.show(); loadNpcs(); loadPcs();
 }
+let artFiles = [];
+function selectArt(file) {   // a picture on its own is a blank token named after the file
+  opt("npc").value = ""; opt("hp").value = ""; opt("name").value = file ? tokenFileName(file) : "";
+  opt("img").value = file ? TOKEN_BASE + encodeURIComponent(file) : "";
+}
 function selectToken(value) {
   const [kind, id] = value.split(":"), n = (kind === "pc" ? pcList || [] : npcs || []).find((x) => x.id === id);
   opt("npc").value = value; opt("name").value = n ? n.name : ""; opt("hp").value = n && n.hp > 0 ? n.hp : "";
-  opt("color").value = "#c8871c"; opt("img").value = "";
+  opt("color").value = "#c8871c"; opt("img").value = ""; opt("art").value = "";
   if (n) { rememberToken(value); renderTokenRecents([...((pcList || []).map((x) => ({ ...x, kind: "pc" }))), ...((npcs || []).map((x) => ({ ...x, kind: x.enemy ? "enemy" : "npc" })))]); }
 }
 function renderTokenRecents(all) {
@@ -117,45 +135,30 @@ export function snapFor(kind, p) {
   return Math.abs(dx) > Math.abs(dy) ? { x: c.x + Math.sign(dx) * 20, y: c.y, dir: "v" } : { x: c.x, y: c.y + Math.sign(dy) * 20, dir: "h" };
 }
 
-// ---- menu and tool bar ------------------------------------------------------
-function showMenu() {
-  const m = $("#addmenu");
-  m.innerHTML = MENU.map(([k, l]) => `<button data-choose="${["door", "light"].includes(k) ? "obj:" + k : k}">${l.replace(" ▸", "")}</button>`).join("");
-  m.hidden = false; placeMenu();
-}
-// Build Tools: a "Build Tools" window (Select / Erase / Shape / Paint brush / Paint bucket) plus one small window per kind (Floors,
-// Walls, Doors, Roofs, Lights, Props): its 5 most recently used swatches as icons, and under them a dropdown with the rest.
-// The tool says HOW you act, the window you last touched says WHAT: pick Stone in Floors, Shape, drag a room; touch Walls and the
-// same Shape tool draws a wall. Any Build item opens them; they stay until you close them with the x.
+// ---- build windows ------------------------------------------------------
+// One small window per kind (Floors, Walls, Doors, Roofs, Lights, Props): its 5 most recently used swatches as icons, and
+// under them a dropdown with the rest. The window you last touched is what you draw with; close them all (or Esc) to stop.
 const KP = {
-  floor: { key: "floor", label: "Floors", mats: FLOOR_MATS, paint: true }, wall: { key: "wall", label: "Walls", mats: WALL_MATS, fixed: "line" },
+  floor: { key: "floor", label: "Floors", mats: FLOOR_MATS }, wall: { key: "wall", label: "Walls", mats: WALL_MATS, fixed: "line" },
   door: { key: "obj:door", label: "Doors", mats: WALL_MATS, fixed: "place", door: true }, roof: { key: "roof", label: "Roofs", mats: ROOF_MATS },
-  elevation: { key: "elevation", label: "Elevation", paint: true },
+  elevation: { key: "elevation", label: "Elevation" },
   light: { key: "obj:light", label: "Lights", mats: LIGHT_MATS, fixed: "place" }, object: { key: "obj:", label: "Objects", fixed: "place", object: true }, prop: { key: "prop", label: "Props", props: true, fixed: "place" },
-  fog: { key: "fog", label: "Fog", paint: true }, label: { key: "label", label: "Labels", fixed: "place" },
+  fog: { key: "fog", label: "Fog" }, label: { key: "label", label: "Labels", fixed: "place" },
 };
-const MODE_ICONS = {   // line icons, drawn in the button's text colour
-  select: "<path d='M6 3l12 9-5.5 1.2L15 19l-2.6 1-2.4-5.6L6 18z'/>",
-  erase: "<path d='M15.5 4.5l5 5-9.5 10H6.5l-3-3z'/><path d='M8 11l6 6M10 20h11'/>",
-  shape: "<rect x='4' y='6' width='16' height='12' rx='1.5'/>",
-  brush: "<path d='M20 3.5c-5.5 3-9 6.5-10.5 10.5l2.5 2.5c4-1.5 7.5-5 10.5-10.5z'/><path d='M9.5 14C6.5 14 5.5 16 5.5 18c0 1.2-.8 2.2-2 2.5 4 .8 8-.3 8-4.5z'/>",
-  bucket: "<path d='M4.5 11.5l7-7 7 7-6 6a2.1 2.1 0 01-3 0z'/><path d='M4.5 11.5h14'/><path d='M20.5 14c1.2 1.8 1.8 2.8 1.8 3.8a1.8 1.8 0 01-3.6 0c0-1 .6-2 1.8-3.8z'/>",
-};
-const MODES = [["select", "Select"], ["erase", "Erase"], ["shape", "Shape"], ["brush", "Paint brush"], ["bucket", "Paint bucket"]];
 let palObj = "plate", palProp = "crate", palLight = LIGHT_DEFAULT.id, palRot = 0, palScale = 1, palColor = "", palRandomRot = false, palRandomScale = false, palFlip = false;
 let fogMode = "cover", labelEdit = null;
 const labelSettings = { text: "", size: 1, color: "#3d2632" };
 let labelRecent = [];
 try { labelRecent = JSON.parse(localStorage.getItem("vtt-recent-labels") || "[]"); } catch { /* first run */ }
 const lightValues = Object.fromEntries(LIGHT_MATS.map((m) => [m.id, lightSettings(m)]));
-const bt = { mode: "shape", kind: "floor", any: false, mats: {}, window: false };   // any = the menu's Erase (erases every kind)
+const bt = { kind: "floor", mats: {}, window: false };
 const SEED = { floor: ["default", "stone", "wood", "grass", "water"], wall: ["default", "stone", "brick", "wood", "plaster"], door: ["default", "wood", "iron", "stone", "brick"], roof: ["default", "thatch", "slate", "tile", "wood"], elevation: [-10, 5, 10, 15, 20], light: LIGHT_MATS.slice(0, 5).map((m) => m.id), prop: ["crate", "table", "chair", "barrel", "chest"], object: ["plate", "switch", "spawn", "tripwire", "dial"], fog: [] };
 const OBJ_KINDS = Object.entries(KINDS).filter(([k]) => k !== "door" && k !== "light");
 const OBJ_GLYPH = { plate: "▣", tripwire: "┅", sight: "◉", gauge: "♥", switch: "⏻", dial: "◔", floor: "▦", spawn: "☠", stone: "●", catapult: "➶", initiative: "⚔" };
 const keyOf = (k) => (KP[k].object ? "obj:" + palObj : KP[k].key);
 let recent = SEED;
 try { const r = JSON.parse(localStorage.getItem("vtt-recent-swatches") || "null"); if (r) recent = { ...SEED, ...r }; } catch { /* first run */ }
-let btWin = null; const kw = {};
+const kw = {};
 const remember = (kind, v) => { recent[kind] = [v, ...(recent[kind] || []).filter((x) => x !== v)].slice(0, 5); try { localStorage.setItem("vtt-recent-swatches", JSON.stringify(recent)); } catch { /* private mode */ } };
 const current = (k) => k === "elevation" ? curElev : KP[k].object ? palObj : KP[k].props ? palProp : k === "light" ? palLight : bt.mats[k] || "default";
 const propGlyph = (k) => { const s = PROP_CATALOG[k]?.shape || "mark"; return s === "rect" ? "<rect x='4' y='8' width='24' height='16' rx='3'/><path d='M7 11l18 10'/>" : s === "round" ? "<circle cx='16' cy='16' r='11'/><circle cx='16' cy='16' r='5' fill='none'/>" : s === "leaf" ? "<circle cx='10' cy='17' r='8'/><circle cx='22' cy='13' r='8'/><circle cx='16' cy='16' r='2'/>" : s === "rock" ? "<path d='M3 23l5-15 14-3 7 14-10 5z'/>" : "<circle cx='16' cy='16' r='9'/><path d='M4 16h24M16 4v24'/>"; };
@@ -181,18 +184,14 @@ const winHTML = (k) => { const c = KP[k]; return k === "elevation" ? `<label cla
 function renderRecent(k) { const box = kw[k]?.body.querySelector(".bt-recent"); if (box) box.innerHTML = (recent[k] || []).map((v) => chipHTML(k, v)).join(""); }
 function applyPal() {
   const c = KP[bt.kind];
-  if (bt.mode === "select") return setTool(null, null, true);
-  if (bt.mode === "erase") return setTool("erase", { eraseOnly: bt.any ? "" : keyOf(bt.kind) }, true);
-  const mode = c.fixed || (bt.mode === "brush" || bt.mode === "bucket" ? (c.paint ? bt.mode : "shape") : "shape");
-  setTool(keyOf(bt.kind), { mode: c.door && bt.window ? "window" : mode, mat: bt.mats[bt.kind] || "", elevation: curElev }, true);
+  setTool(keyOf(bt.kind), { mode: c.door && bt.window ? "window" : c.fixed || "shape", mat: bt.mats[bt.kind] || "", elevation: curElev });
 }
 function syncPalette() {
   tokWin?.el.classList.toggle("pal-active", S.tool === "token");
-  if (!btWin) return;
-  const shown = S.tool === "token" ? "" : S.tool || S.placing ? bt.mode : "select", paint = KP[bt.kind].paint;
-  btWin.body.querySelectorAll("[data-mode]").forEach((b) => { const off = (b.dataset.mode === "brush" || b.dataset.mode === "bucket") && !paint; b.classList.toggle("on", b.dataset.mode === shown); b.disabled = off; b.classList.toggle("off", off); });
+  const drawing = S.tool !== "token" && !!(S.tool || S.placing);
+  document.querySelectorAll("#win-bar-build [data-kind]").forEach((b) => b.classList.toggle("on", b.dataset.kind === "traps" ? !!S.puzzleMode : drawing && !S.puzzleMode && b.dataset.kind === bt.kind));
   for (const [k, w] of Object.entries(kw)) {
-    w.el.classList.toggle("pal-active", k === bt.kind && !bt.any && shown !== "select" && shown !== "");
+    w.el.classList.toggle("pal-active", drawing && k === bt.kind);
     w.body.querySelectorAll("[data-v]").forEach((b) => b.classList.toggle("on", b.dataset.v === current(k)));
     w.body.querySelector("[data-win]")?.classList.toggle("on", bt.window);
     w.body.querySelectorAll("[data-fog-mode]").forEach((b) => b.classList.toggle("on", b.dataset.fogMode === fogMode));
@@ -203,17 +202,9 @@ function pick(kind, v) {
   const c = KP[kind];
   if (c.object) palObj = v; else if (c.props) palProp = v; else if (kind === "light") { palLight = v; lightValues[v] ||= lightSettings(LIGHT_MATS.find((m) => m.id === v)); renderLightValues(); } else bt.mats[kind] = v === "default" ? "" : v;
   remember(kind, v); renderRecent(kind);
-  bt.kind = kind; bt.any = false; if (bt.mode === "select") bt.mode = "shape"; applyPal();
+  activate(kind);
 }
-function activate(kind) { if (bt.kind === kind && !bt.any) return; bt.kind = kind; bt.any = false; applyPal(); }
-function toolsWin() {
-  if (btWin) return btWin;
-  btWin = floatWindow({ id: "build-tools", title: "Build Tools", x: 20, y: 90 }); btWin.body.className += " paltools";
-  btWin.body.innerHTML = MODES.map(([k, l]) => `<button type="button" data-mode="${k}" title="${l}" aria-label="${l}"><svg viewBox="0 0 24 24" aria-hidden="true">${MODE_ICONS[k]}</svg></button>`).join("");
-  btWin.body.addEventListener("click", (e) => { const b = e.target.closest("[data-mode]"); if (!b || b.disabled) return; bt.mode = b.dataset.mode; if (bt.mode !== "erase") bt.any = false; applyPal(); });
-  btWin.el.addEventListener("fwin-close", () => { Object.values(kw).forEach((w) => w.hide()); setTool(null, null, true); });
-  return btWin;
-}
+function activate(kind) { bt.kind = kind; applyPal(); }
 function kindWin(kind) {
   if (kw[kind]) return kw[kind];
   const c = KP[kind], at = { floor: [190, 90], wall: [370, 90], door: [550, 90], roof: [730, 90], light: [910, 90], elevation: [910, 260], prop: [190, 260], object: [370, 260] }[kind] || [190, 90];   // side by side
@@ -233,12 +224,12 @@ function kindWin(kind) {
   if (kind === "light") { w.body.querySelector("[data-more]").value = palLight; renderLightValues(); }
   w.el.addEventListener("pointerdown", () => activate(kind));   // touching a window makes it the one you draw with
   w.el.addEventListener("fwin-close", () => {
-    if (bt.kind === kind) { const next = Object.keys(kw).find((k) => k !== kind && kw[k].visible()); if (next) bt.kind = next; }
-    applyPal();
+    const next = Object.keys(kw).find((k) => k !== kind && kw[k].visible());
+    if (next) activate(next); else setTool(null);
   });
   return w;
 }
-function openKind(kind) { toolsWin().show(); bt.kind = kind; bt.any = false; if (bt.mode === "select") bt.mode = "shape"; if (kind === "label") labelWin().show(); else kindWin(kind).show(); applyPal(); }
+function openKind(kind) { (kind === "label" ? labelWin() : kindWin(kind)).show(); activate(kind); }
 function rememberLabel(text) {
   labelRecent = [text, ...labelRecent.filter((x) => x !== text)].slice(0, 5);
   try { localStorage.setItem("vtt-recent-labels", JSON.stringify(labelRecent)); } catch { /* private mode */ }
@@ -267,54 +258,58 @@ function labelWin() {
   w.el.addEventListener("pointerdown", () => activate("label")); w.el.addEventListener("fwin-close", () => { if (S.tool === "label") setTool(null); });
   document.addEventListener("vttvisibilitychange", renderLabelWindow); renderLabelWindow(); return w;
 }
-const hideSub = () => { const s = $("#addsub"); if (s) s.hidden = true; $("#addmenu").querySelector(".open")?.classList.remove("open"); };
-// Drop the menu down from the Build item in the menu bar.
-function placeMenu() {
-  const m = $("#addmenu"), b = $("#add").getBoundingClientRect(), r = m.getBoundingClientRect();
-  m.style.left = Math.max(0, Math.min(innerWidth - r.width, b.left)) + "px"; m.style.top = b.bottom + "px";
-}
-export function setTool(type, floor, keepPal) {
-  S.tool = null; S.placing = null; drag = null; curMat = ""; curMode = ""; eraseOnly = ""; $("#preview").textContent = "";
+// Select, ruler and ping end building: the build windows close and the left button stops drawing.
+function stopBuilding() { for (const w of Object.values(kw)) w.hide(); setTool(null); }
+export function setTool(type, floor) {
+  if (S.puzzleMode) $("#mode").click();   // leaving traps and triggers; panel.js clears its own selection
+  S.tool = null; S.placing = null; drag = null; curMat = ""; curMode = ""; preview();
   if (type?.startsWith("obj:")) S.placing = type.slice(4); else S.tool = type;
-  if (floor) { curMat = floor.mat || ""; curMode = floor.mode || ""; eraseOnly = floor.eraseOnly || ""; if (floor.elevation != null) curElev = Number(floor.elevation) || 0; }
-  $("#addmenu").hidden = true; hideSub(); if (type !== "token") tokWin?.hide(); renderToolbar(); renderPanel();
+  if (floor) { curMat = floor.mat || ""; curMode = floor.mode || ""; if (floor.elevation != null) curElev = Number(floor.elevation) || 0; }
+  if (type !== "token") tokWin?.hide(); renderToolbar(); renderPanel();
   syncPalette();
+  if (type) { S.select3d = false; document.getElementById("bar-select")?.classList.remove("on"); }
 }
-export function renderToolbar() {   // the top strip is gone: the Build Tools windows say what is active
+export function renderToolbar() {   // the top strip is gone: the highlighted window says what is active
   const t = S.placing ? "obj:" + S.placing : S.tool;
-  $("#add").classList.toggle("on", !!t);
   $("#toolbar").hidden = true;
   if (t === "token") renderTokenWin();   // Token lives in its own floating window
 }
+// shortcut: roofs, elevation, labels and the dungeon generator have no button; add one here if wanted.
+const BUILD = [
+  ["wall", "Walls", '<path d="M2 4h20v16H2ZM2 12h20M8 4v8m8 0v8"/>'],
+  ["floor", "Floors", '<path d="m12 3 10 9-10 9L2 12Zm-5 4 10 10M7 17 17 7"/>'],
+  ["door", "Doors and windows", '<path d="M4 21V3h16v18M7 21V5h10v16M13 13h1"/>'],
+  ["light", "Lights", '<path d="M9 18h6m-5 3h4M8 14a6 6 0 1 1 8 0l-1 2H9Z"/>'],
+  ["prop", "Props", '<path d="m3 6 9-4 9 4v12l-9 4-9-4Zm0 0 9 4 9-4M12 10v12"/>'],
+  ["fog", "Fog", '<path d="M3 8h13m-9 4h14M3 16h12m-7 4h11"/>'],
+  ["traps", "Traps and triggers", '<path d="M13 2 4 14h6l-1 8 9-12h-6Z"/>'],
+];
+function toggleKind(kind) {   // a second click on the tool you are drawing with puts it away
+  if (kind === "traps") { const on = S.puzzleMode; stopBuilding(); if (!on) $("#mode").click(); return syncPalette(); }
+  const w = kw[kind];
+  if (w?.visible() && bt.kind === kind && (S.tool || S.placing)) { w.hide(); w.el.dispatchEvent(new Event("fwin-close")); } else openKind(kind);
+}
+function toggleTokens() {
+  if (S.tool === "token") return setTool(null);
+  // opens blank each time: no dropdown pick, empty name and HP
+  if (tokWin) for (const [k, v] of [["npc", ""], ["art", ""], ["name", ""], ["hp", ""], ["color", "#c8871c"], ["img", ""]]) tokWin.body.querySelector(`[data-o="${k}"]`).value = v;
+  setTool("token");
+}
 export function initTools() {
   if (!S.isGM) return;
-  $("#add").hidden = false;
-  $("#add").addEventListener("click", (e) => { e.stopPropagation(); const m = $("#addmenu"); if (m.hidden) showMenu(); else { m.hidden = true; hideSub(); } });
-  const choose = (e) => {
-    e.stopPropagation();
-    const c = e.target.closest("[data-choose]"); if (!c) return;
-    if (c.dataset.choose === "puzzle") { setTool(null); return $("#mode").click(); }
-    if (c.dataset.choose === "generator") { $("#addmenu").hidden = true; hideSub(); return openGenerator(); }
-    const ch = c.dataset.choose;
-    if (ch === "object") { $("#addmenu").hidden = true; hideSub(); return openKind("object"); }
-    if (ch === "token") {   // opens blank each time: no dropdown pick, empty name and HP
-      if (tokWin) { tokWin.body.querySelector('[data-o="npc"]').value = ""; tokWin.body.querySelector('[data-o="name"]').value = ""; tokWin.body.querySelector('[data-o="hp"]').value = ""; tokWin.body.querySelector('[data-o="color"]').value = "#c8871c"; tokWin.body.querySelector('[data-o="img"]').value = ""; }
-      return setTool("token");
-    }
-    $("#addmenu").hidden = true; hideSub();
-    const pk = ch.startsWith("obj:") ? ch.slice(4) : ch;
-    if (KP[pk]) openKind(pk); else setTool(ch);   // other puzzle objects: plain place tool
-  };
-  $("#addmenu").addEventListener("click", choose);
-  document.addEventListener("click", (e) => { if (e.target.closest("#addsub")) choose(e); });
-  document.addEventListener("click", (e) => { if (!e.target.closest("#addmenu, #addsub, #add")) { $("#addmenu").hidden = true; hideSub(); } });
-  document.addEventListener("keydown", (e) => { if (e.key.toLowerCase() === "r" && (S.placing || S.tool === "prop")) { palRot = (palRot + 90) % 360; const r=btWin?.body.querySelector('[data-pal="rot"]'); if(r)r.value=palRot; return; } if (e.key === "Escape" && (S.tool || S.placing)) setTool(null); });
+  const bar = toolbar("build", "Build Controls", 180).body;
+  bar.innerHTML = BUILD.map(([k, l, d]) => `<button type="button" class="barbtn" data-kind="${k}" title="${l}" aria-label="${l}">${svg(d)}</button>`).join("");
+  bar.addEventListener("click", (e) => { const b = e.target.closest("[data-kind]"); if (b) toggleKind(b.dataset.kind); });
+  addBarButton({ id: "token", label: "Tokens", gmOnly: true, onClick: toggleTokens });
+  document.addEventListener("keydown", (e) => { if (e.key.toLowerCase() === "r" && (S.placing || S.tool === "prop")) { palRot = (palRot + 90) % 360; const r=kw.prop?.body.querySelector('[data-pal="rot"]'); if(r)r.value=palRot; return; } if (e.key === "Escape" && (S.tool || S.placing)) setTool(null); });
   document.addEventListener("toolchange", renderToolbar);
+  // capture phase: bar buttons stop the click from bubbling
+  document.addEventListener("click", (e) => { if (e.target.closest?.("#bar-select, #bar-ruler, #bar-ping")) stopBuilding(); }, true);
 }
 
 // ---- placing ----------------------------------------------------------------
 function placeToken(c) {
-  const [kind, ref] = (opt("npc")?.value || "").split(":"), cur = (pcList || []).find((x) => x.id === ref)?.cur, npc = kind === "npc" || kind === "enemy" ? ref : "", pc = kind === "pc" ? ref : "", name = opt("name")?.value.trim(), hp = parseInt(opt("hp")?.value, 10), color = opt("color")?.value, img = opt("img")?.value.trim();
+  const [kind, ref] = (opt("npc")?.value || "").split(":"), cur = (pcList || []).find((x) => x.id === ref)?.cur, npc = kind === "npc" || kind === "enemy" ? ref : "", pc = kind === "pc" ? ref : "", name = opt("name")?.value.trim(), hp = parseInt(opt("hp")?.value, 10), color = opt("color")?.value, img = opt("img")?.value.trim() || artFor(name, artFiles);
   const used = new Set(Object.entries(S.tokens).map(([id, t]) => t.label || id));
   const label = name || [..."ABCDEFGHIJKLMNOPQRSTUVWXYZ"].find((l) => !used.has(l)) || "?";
   if (kind && ref) rememberToken(`${kind}:${ref}`);
@@ -337,7 +332,7 @@ function beginSegment(type, e, p) {
   } else {
     const a = vertex(p); drag = { type, a, b: a, pending: true, moved: false };
   }
-  $("#map").setPointerCapture(e.pointerId); preview();
+  capture(e); preview();
 }
 // One wall per place: whatever part of an existing wall lies under a new wall (or a door) is cut away; the rest of it stays.
 // Cut the part of wall w that lies under the segment a-b: null if they don't overlap, else the leftover pieces of w.
@@ -380,8 +375,8 @@ function doorsClear(a, b, changes) {
 }
 function placeWall(a, b, mat, extra = {}) {
   const changes = {}; wallClear(a, b, changes); doorsClear(a, b, changes);
-  changes[`map/walls/${uid("w")}`] = { x1: a.x, y1: a.y, x2: b.x, y2: b.y, ...(mat ? { mat } : {}), ...extra };
-  patch(changes);
+  changes[`map/walls/${uid("w")}`] = { x1: a.x, y1: a.y, x2: b.x, y2: b.y, lv: S.level ?? 0, ...(mat ? { mat } : {}), ...extra };
+  patchGrowing(changes, a, b);
 }
 function placeDoors(d) {
   const segment = segmentDoors(d.a, d.b), cells = segment.cells;
@@ -396,7 +391,7 @@ function placeDoors(d) {
     const dv = cell.dir === "v"; wallClear({ x: cell.x - (dv ? 0 : 20), y: cell.y - (dv ? 20 : 0) }, { x: cell.x + (dv ? 0 : 20), y: cell.y + (dv ? 20 : 0) }, changes);
     changes[`objects/${id}`] = { ...(old?.[1] || newObject("door", cell.x, cell.y, n + i + 1)), x: cell.x, y: cell.y, sx: cell.x, sy: cell.y, ...extra, lv: S.level ?? 0 };
   });
-  patch(changes);
+  patchGrowing(changes, d.a, d.b);
 }
 const distToSeg = (p, a) => {
   const dx = a.x2 - a.x1, dy = a.y2 - a.y1, l = dx * dx + dy * dy || 1;
@@ -408,27 +403,6 @@ const onLevel = (a) => (a.lv ?? 0) === (S.level ?? S.map.level ?? 0);
 function paintElevation(rects, elev = curElev) { const changes = applyElevation(S.map.floors, rects, elev, S.level ?? S.map.level ?? 0); if (Object.keys(changes).length) patch(changes); }
 export function fogAt(p) { return Object.entries(S.map.fog || {}).find(([, a]) => onLevel(a) && inRect(p, a))?.[0]; }
 export function roofAt(p) { return Object.entries(S.map.roofs).find(([, a]) => onLevel(a) && inRect(p, a))?.[0]; }
-function erase(e, p) {
-  const hit = (sel) => e.target.closest(sel)?.dataset.id;
-  let id;
-  if (eraseOnly === "elevation") return paintElevation([{ x: cellOf(p).x - 20, y: cellOf(p).y - 20, w: 40, h: 40 }], 0);
-  if (eraseOnly) {
-    const k = eraseOnly, inMap = (m) => Object.entries(S.map[m] || {}).find(([, a]) => inRect(p, a))?.[0];
-    if (k === "token" || k === "prop") { if ((id = hit("." + k))) put(`${k === "token" ? "tokens" : "map/props"}/${id}`, null); }
-    else if (k.startsWith("obj:")) { if ((id = hit(".obj")) && S.objects[id]?.kind === k.slice(4)) put(`objects/${id}`, null); }
-    else if (k === "wall") { const w = Object.entries(S.map.walls).find(([, a]) => distToSeg(p, a) < 9); if (w) put(`map/walls/${w[0]}`, null); }
-    else if ((id = inMap(k === "floor" ? "floors" : k === "fog" ? "fog" : "roofs"))) put(`map/${k === "floor" ? "floors" : k === "fog" ? "fog" : "roofs"}/${id}`, null);
-    return;
-  }
-  if ((id = hit(".token"))) return put(`tokens/${id}`, null);
-  if ((id = hit(".obj"))) return put(`objects/${id}`, null);
-  if ((id = hit(".prop"))) return put(`map/props/${id}`, null);
-  const w = Object.entries(S.map.walls).find(([, a]) => distToSeg(p, a) < 9); if (w) return put(`map/walls/${w[0]}`, null);
-  if ((id = fogAt(p))) return put(`map/fog/${id}`, null);
-  if ((id = roofAt(p))) return put(`map/roofs/${id}`, null);
-  const f = Object.entries(S.map.floors).find(([, a]) => inRect(p, a)); if (f) put(`map/floors/${f[0]}`, null);
-}
-
 // ---- pointer handling (called from vtt.js; return true when the event was used) ----
 export function toolDown(e, p) {
   if (!S.isGM) return false;
@@ -439,9 +413,7 @@ export function toolDown(e, p) {
     drag = { type: "propmove", id: el_.dataset.id, el: el_, x0: p.x, y0: p.y, moved: false };
     $("#map").setPointerCapture(e.pointerId); return true;
   }
-  if ((t === "floor" || t === "fog" || t === "elevation") && curMode === "bucket") bucketFill(t, p);
-  else if ((t === "floor" || t === "fog" || t === "elevation") && curMode === "brush") { const c = cellOf(p); drag = { type: "brush", kind: t, cells: new Map([[c.x + "," + c.y, c]]) }; $("#map").setPointerCapture(e.pointerId); preview(); }
-  else if (t === "token") placeToken(cellOf(p));
+  if (t === "token") placeToken(cellOf(p));
   else if (t === "label") {
     const c = cellOf(p), text = labelSettings.text.trim(); if (!text) return true;
     const old = labelEdit && S.map.labels[labelEdit];
@@ -450,59 +422,28 @@ export function toolDown(e, p) {
     rememberLabel(text); renderLabelWindow();
   }
   else if (t === "prop") { const c = cellOf(p), rot = palRandomRot ? Math.floor(Math.random() * 4) * 90 : palRot, s = palRandomScale ? .5 + Math.random() * 1.5 : palScale; put(`map/props/${uid("p")}`, { kind: opt("prop")?.value || palProp, x: c.x, y: c.y, lv: S.level ?? 0, rot, s, ...(palColor ? { color: palColor } : {}), ...(palFlip ? { flip: true } : {}) }); }
-  else if (t === "erase") erase(e, p);
   else if (t === "wall") beginSegment("wall", e, p);
-  else if (t === "floor" || t === "roof" || t === "fog" || t === "elevation") { const c = cellOf(p); drag = { type: t, a: c, b: c }; $("#map").setPointerCapture(e.pointerId); preview(); }
+  else if (t === "floor" || t === "roof" || t === "fog" || t === "elevation") { const c = t === "floor" ? openCell(p) : cellOf(p); drag = { type: t, a: c, b: c }; capture(e); preview(); }
   return true;
-}
-// Paint bucket: flood-fill the cells reachable from the click without crossing a wall or door, as row-run rectangles.
-function bucketFill(type, p) {
-  const { cols: COLS, rows: ROWS } = mapSize(), c0 = cellOf(p), start = [(c0.x - 20) / 40, (c0.y - 20) / 40];
-  // A step between two neighbouring cells is blocked when any wall or door segment crosses the line between their centres.
-  // (Works for diagonal / off-grid walls such as imported cave maps, not just walls lying on cell edges.)
-  const lv = S.level ?? S.map.level ?? 0, segs = [];
-  for (const w of Object.values(S.map.walls || {})) if ((w.lv ?? 0) === lv) segs.push([w.x1, w.y1, w.x2, w.y2]);
-  for (const d of Object.values(S.objects)) if (d.kind === "door" && (d.lv ?? 0) === lv) { const n = d.doorKind === "double" ? 40 : 20, v = d.dir === "v"; segs.push([d.x - (v ? 0 : n), d.y - (v ? n : 0), d.x + (v ? 0 : n), d.y + (v ? n : 0)]); }
-  const byCell = new Map();   // cell "cx,cy" -> segments whose bounding box touches it
-  for (const s of segs) {
-    const x0 = Math.max(0, Math.floor(Math.min(s[0], s[2]) / 40)), x1 = Math.min(COLS - 1, Math.floor(Math.max(s[0], s[2]) / 40));
-    const y0 = Math.max(0, Math.floor(Math.min(s[1], s[3]) / 40)), y1 = Math.min(ROWS - 1, Math.floor(Math.max(s[1], s[3]) / 40));
-    for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) { const k = x + "," + y; (byCell.get(k) || byCell.set(k, []).get(k)).push(s); }
-  }
-  const orient = (ax, ay, bx, by, cx, cy) => Math.sign((bx - ax) * (cy - ay) - (by - ay) * (cx - ax));
-  const crosses = (ax, ay, bx, by, [cx, cy, dx, dy]) => orient(ax, ay, bx, by, cx, cy) * orient(ax, ay, bx, by, dx, dy) <= 0 && orient(cx, cy, dx, dy, ax, ay) * orient(cx, cy, dx, dy, bx, by) <= 0
-    && !(orient(ax, ay, bx, by, cx, cy) === 0 && orient(ax, ay, bx, by, dx, dy) === 0);   // collinear overlap is not a crossing
-  const blockedStep = (cx, cy, nx, ny) => {
-    const ax = cx * 40 + 20, ay = cy * 40 + 20, bx = nx * 40 + 20, by = ny * 40 + 20;
-    return (byCell.get(cx + "," + cy) || []).some((s) => crosses(ax, ay, bx, by, s)) || (byCell.get(nx + "," + ny) || []).some((s) => crosses(ax, ay, bx, by, s));
-  };
-  const seen = new Set([start.join()]), q = [start];
-  while (q.length) {
-    const [cx, cy] = q.pop();
-    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-      const nx = cx + dx, ny = cy + dy;
-      if (nx < 0 || ny < 0 || nx >= COLS || ny >= ROWS || seen.has(nx + "," + ny)) continue;
-      if (!blockedStep(cx, cy, nx, ny)) { seen.add(nx + "," + ny); q.push([nx, ny]); }
-    }
-  }
-  if (type === "elevation") { const rects = []; for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) if (seen.has(x + "," + y)) rects.push({ x: x * 40, y: y * 40, w: 40, h: 40 }); paintElevation(rects); return; }
-  const changes = {}, base = type === "fog" ? "map/fog" : "map/floors"; let n = 0;
-  for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) {
-    if (!seen.has(x + "," + y) || (x && seen.has(x - 1 + "," + y))) continue;
-    let w = 1; while (seen.has(x + w + "," + y)) w++;
-    changes[`${base}/${uid(type[0])}${n++}`] = { x: x * 40, y: y * 40, w: w * 40, h: 40, ...(type === "fog" ? { open: false } : matOf() ? { mat: matOf() } : {}) };
-  }
-  patch(changes);
 }
 function rectOf(d) {
   const x0 = Math.min(d.a.x, d.b.x) - 20, y0 = Math.min(d.a.y, d.b.y) - 20, x1 = Math.max(d.a.x, d.b.x) + 20, y1 = Math.max(d.a.y, d.b.y) + 20;
   return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
 }
+const doorLine = (d) => [d.dir === "v" ? d.x : d.x - 20, d.dir === "v" ? d.y - 20 : d.y, d.dir === "v" ? d.x : d.x + 20, d.dir === "v" ? d.y + 20 : d.y];
+function ghostSegments() {
+  if (drag.type === "wall") return [[drag.a.x, drag.a.y, drag.b.x, drag.b.y]];
+  if (drag.type === "door") return segmentDoors(drag.a, drag.b).cells.map(doorLine);
+  const { x, y, w, h } = rectOf(drag);
+  return [[x, y, x + w, y], [x + w, y, x + w, y + h], [x + w, y + h, x, y + h], [x, y + h, x, y]];
+}
+// shortcut: a prop being dragged has no ghost; props are only draggable in the top-down view.
+// The element under the pointer keeps the drag: the flat layer in top-down, the 3D canvas in the angled view.
+const capture = (e) => (e.target.ownerSVGElement ? $("#map") : e.target).setPointerCapture(e.pointerId);
 function preview() {
-  const l = $("#preview"); l.textContent = ""; if (!drag || drag.type === "propmove") return;
-  if (drag.type === "brush") for (const c of drag.cells.values()) el("rect", { x: c.x - 20, y: c.y - 20, width: 40, height: 40, class: `ghost ${drag.kind}ghost` }, l);
-  else if (drag.type === "wall") el("line", { x1: drag.a.x, y1: drag.a.y, x2: drag.b.x, y2: drag.b.y, class: "wall ghost" }, l);
-  else if (drag.type === "door") for (const d of segmentDoors(drag.a, drag.b).cells) el("line", { x1: d.dir === "v" ? d.x : d.x - 20, y1: d.dir === "v" ? d.y - 20 : d.y, x2: d.dir === "v" ? d.x : d.x + 20, y2: d.dir === "v" ? d.y + 20 : d.y, class: "doorbar ghost" }, l);
+  const l = $("#preview"); l.textContent = ""; S.v3d?.preview(drag && drag.type !== "propmove" ? ghostSegments() : []); if (!drag || drag.type === "propmove") return;
+  if (drag.type === "wall") el("line", { x1: drag.a.x, y1: drag.a.y, x2: drag.b.x, y2: drag.b.y, class: "wall ghost" }, l);
+  else if (drag.type === "door") for (const [x1, y1, x2, y2] of ghostSegments()) el("line", { x1, y1, x2, y2, class: "doorbar ghost" }, l);
   else { const r = rectOf(drag); el("rect", { x: r.x, y: r.y, width: r.w, height: r.h, class: `ghost ${drag.type}ghost` }, l); }
 }
 export function toolMove(e, p) {
@@ -512,19 +453,17 @@ export function toolMove(e, p) {
     if (drag.moved) { const c = cellOf(p), a = S.map.props[drag.id]; drag.to = c; drag.el.setAttribute("transform", `translate(${c.x - a.x} ${c.y - a.y})`); }
     return true;
   }
-  if (drag.type === "brush") { const c = cellOf(p); drag.cells.set(c.x + "," + c.y, c); preview(); return true; }
   if (drag.type === "wall" || drag.type === "door") { const b = segmentEnd(drag.a, p); drag.b = b; drag.moved = drag.a.x !== b.x || drag.a.y !== b.y; preview(); return true; }
-  drag.b = cellOf(p); preview(); return true;
+  drag.b = drag.type === "floor" ? openCell(p) : cellOf(p); preview(); return true;
 }
 export function toolUp() {
   if (!drag) return false;
   const d = drag;
   if ((d.type === "wall" || d.type === "door") && d.pending && !d.moved) { preview(); return true; }
-  drag = null; $("#preview").textContent = "";
+  drag = null; preview();
   if (d.type === "propmove") { if (d.moved && d.to) patch({ [`map/props/${d.id}/x`]: d.to.x, [`map/props/${d.id}/y`]: d.to.y }); return true; }
   if (d.type === "wall") { if (d.a.x !== d.b.x || d.a.y !== d.b.y) placeWall(d.a, d.b, matOf()); return true; }
   if (d.type === "door") { placeDoors(d); return true; }
-  if (d.type === "brush") { if (d.kind === "elevation") { paintElevation([...d.cells.values()].map((c) => ({ x: c.x - 20, y: c.y - 20, w: 40, h: 40 }))); return true; } const fog = d.kind === "fog", base = fog ? "map/fog" : "map/floors", have = new Set(Object.values((fog ? S.map.fog : S.map.floors) || {}).filter((f) => f.w === 40 && f.h === 40 && (fog || (f.mat || "") === matOf())).map((f) => f.x + "," + f.y)); const ch = {}; let n = 0; for (const c of d.cells.values()) if (!have.has(c.x - 20 + "," + (c.y - 20))) ch[`${base}/${uid("f")}${n++}`] = { x: c.x - 20, y: c.y - 20, w: 40, h: 40, ...(fog ? { open: false } : matOf() ? { mat: matOf() } : {}) }; if (n) patch(ch); return true; }
   const r = rectOf(d);
   if (d.type === "elevation") paintElevation([r]);
   else if (d.type === "roof") put(`map/roofs/${uid("r")}`, { ...r, open: false, lv: S.level ?? 0, ...(matOf() ? { mat: matOf() } : {}) });
@@ -533,7 +472,7 @@ export function toolUp() {
     else put(`map/fog/${uid("g")}`, { ...r, open: fogMode === "reveal", lv: S.level ?? 0 });
   }
   else {
-    put(`map/floors/${uid("f")}`, { ...r, lv: S.level ?? 0, ...(matOf() ? { mat: matOf() } : {}) });
+    patchGrowing({ [`map/floors/${uid("f")}`]: { ...r, lv: S.level ?? 0, ...(matOf() ? { mat: matOf() } : {}) } }, r, { x: r.x + r.w, y: r.y + r.h });
     if (curMode === "shape" && wallsAround) [[r.x, r.y, r.x + r.w, r.y], [r.x + r.w, r.y, r.x + r.w, r.y + r.h], [r.x + r.w, r.y + r.h, r.x, r.y + r.h], [r.x, r.y + r.h, r.x, r.y]]
       .forEach(([x1, y1, x2, y2]) => placeWall({ x: x1, y: y1 }, { x: x2, y: y2 }, ""));
   }

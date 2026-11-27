@@ -8,9 +8,9 @@ test("explored cells encode as compact row runs and round trip", () => {
   assert.deepEqual(decodeCells(encodeCells(cells)), cells);
 });
 
-test("malformed or negative cells are ignored", () => {
+test("malformed cells are ignored", () => {
   assert.deepEqual(decodeCells("v1|0:0-2,bad;wat:1;1:3-2"), new Set(["0,0", "1,0", "2,0"]));
-  assert.equal(encodeCells(["-1,0", "x,2", "2,3"]).includes("-"), false);
+  assert.equal(encodeCells(["x,2", "2,3"]), "v1|3:2");
 });
 
 test("visibility uses the existing circular light holes", () => {

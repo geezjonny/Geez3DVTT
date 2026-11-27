@@ -3,26 +3,29 @@
 import { $, S, mapSize } from "./state.js";
 import { put } from "./undo.js";
 import { addBarButton } from "./ui.js";
+import { MAX_CELLS } from "./bounds.js";
 
 const svg = $("#map"), NS = "http://www.w3.org/2000/svg";
 let view = null, resizing = false, space = false, panning = null, sizing = null, pinch = null;
 const touches = new Map();   // active touch pointers, for pinch-zoom and two-finger pan   // view = {x,y,w,h} in map px; null = whole map
 const W = () => mapSize().cols * 40, H = () => mapSize().rows * 40;
+const X = () => mapSize().x * 40, Y = () => mapSize().y * 40;   // left and top edge
 
 export function applyView() {
   const w = W(), h = H(), z = view ? Math.max(1, w / view.w) : 1;
   if (z <= 1.001) view = null;
-  if (view) { view.w = w / z; view.h = h / z; view.x = Math.max(0, Math.min(w - view.w, view.x)); view.y = Math.max(0, Math.min(h - view.h, view.y)); }
-  const v = view || { x: 0, y: 0, w, h };
+  if (view) { view.w = w / z; view.h = h / z; view.x = Math.max(X(), Math.min(X() + w - view.w, view.x)); view.y = Math.max(Y(), Math.min(Y() + h - view.h, view.y)); }
+  const v = view || { x: X(), y: Y(), w, h };
   svg.setAttribute("viewBox", `${v.x} ${v.y} ${v.w} ${v.h}`);
   document.querySelector(".paper")?.style.setProperty("--ar", w / h);   // the page frame takes the map shape and fits the window, so nothing scrolls
-  $("#mapbase")?.setAttribute("width", w - 40); $("#mapbase")?.setAttribute("height", h - 40);
-  for (const r of svg.querySelectorAll(".fullrect")) { r.setAttribute("width", w); r.setAttribute("height", h); }
+  const base = $("#mapbase");
+  for (const [k, n] of [["x", X() + 20], ["y", Y() + 20], ["width", w - 40], ["height", h - 40]]) base?.setAttribute(k, n);
+  for (const r of svg.querySelectorAll(".fullrect")) for (const [k, n] of [["x", X()], ["y", Y()], ["width", w], ["height", h]]) r.setAttribute(k, n);
   drawHandles();
 }
 export const zoomBy = (f, cx, cy) => {   // zoom about a map point (default: the middle of what is visible)
   if (S.v3d) return S.v3d.zoom(f);
-  const w = W(), h = H(), v = view || { x: 0, y: 0, w, h }, nw = Math.max(w / 8, Math.min(w, v.w * f)), k = nw / v.w;
+  const w = W(), h = H(), v = view || { x: X(), y: Y(), w, h }, nw = Math.max(w / 8, Math.min(w, v.w * f)), k = nw / v.w;
   cx ??= v.x + v.w / 2; cy ??= v.y + v.h / 2;
   view = { x: cx - (cx - v.x) * k, y: cy - (cy - v.y) * k, w: nw, h: v.h * k }; applyView();
 };
@@ -33,16 +36,16 @@ const toMap = (e) => { const p = svg.createSVGPoint(); p.x = e.clientX; p.y = e.
 function drawHandles() {
   let g = $("#resize"); if (!g) { g = document.createElementNS(NS, "g"); g.id = "resize"; svg.append(g); }
   g.textContent = ""; if (!resizing || !S.isGM) return;
-  const w = W(), h = H(), s = (view ? view.w : w) / 800;   // keep handles a constant on-screen size
-  const lines = document.createElementNS(NS, "rect"); lines.setAttribute("width", w); lines.setAttribute("height", h); lines.setAttribute("fill", "url(#gridlines)"); lines.setAttribute("pointer-events", "none"); g.append(lines);   // grid lines over the whole map
+  const w = W(), h = H(), left = X(), top = Y(), s = (view ? view.w : w) / 800;   // keep handles a constant on-screen size
+  const lines = document.createElementNS(NS, "rect"); lines.setAttribute("x", left); lines.setAttribute("y", top); lines.setAttribute("width", w); lines.setAttribute("height", h); lines.setAttribute("fill", "url(#gridlines)"); lines.setAttribute("pointer-events", "none"); g.append(lines);   // grid lines over the whole map
   const mk = (x, y, ww, hh, mode, cur) => { const r = document.createElementNS(NS, "rect"); r.setAttribute("class", "rhandle"); r.dataset.mode = mode;
     r.setAttribute("x", x - ww / 2); r.setAttribute("y", y - hh / 2); r.setAttribute("width", ww); r.setAttribute("height", hh); r.setAttribute("rx", 4 * s); r.style.cursor = cur; g.append(r); };
-  mk(w, h / 2, 14 * s, 60 * s, "x", "ew-resize"); mk(w / 2, h, 60 * s, 14 * s, "y", "ns-resize"); mk(w, h, 22 * s, 22 * s, "xy", "nwse-resize");
-  const o = document.createElementNS(NS, "rect"); o.setAttribute("class", "rframe"); o.setAttribute("x", 0); o.setAttribute("y", 0); o.setAttribute("width", w); o.setAttribute("height", h); g.prepend(o);
+  mk(left + w, top + h / 2, 14 * s, 60 * s, "x", "ew-resize"); mk(left + w / 2, top + h, 60 * s, 14 * s, "y", "ns-resize"); mk(left + w, top + h, 22 * s, 22 * s, "xy", "nwse-resize");
+  const o = document.createElementNS(NS, "rect"); o.setAttribute("class", "rframe"); o.setAttribute("x", left); o.setAttribute("y", top); o.setAttribute("width", w); o.setAttribute("height", h); g.prepend(o);
 }
 function sizePreview(e) {
-  const p = toMap(e), c = sizing.mode.includes("x") ? Math.max(10, Math.min(100, Math.round(p.x / 40))) : mapSize().cols, r = sizing.mode.includes("y") ? Math.max(7, Math.min(100, Math.round(p.y / 40))) : mapSize().rows;
-  S.map.size = { cols: c, rows: r }; applyView(); sizing.last = { cols: c, rows: r };
+  const p = toMap(e), m = mapSize(), c = sizing.mode.includes("x") ? Math.max(10, Math.min(MAX_CELLS, Math.round(p.x / 40) - m.x)) : m.cols, r = sizing.mode.includes("y") ? Math.max(7, Math.min(MAX_CELLS, Math.round(p.y / 40) - m.y)) : m.rows;
+  sizing.last = { cols: c, rows: r, x: m.x, y: m.y }; S.map.size = sizing.last; applyView();
 }
 
 export function initView() {
@@ -54,14 +57,14 @@ export function initView() {
     }
     const hnd = e.target.closest?.(".rhandle");
     if (hnd) { sizing = { mode: hnd.dataset.mode, before: { ...mapSize() } }; svg.setPointerCapture(e.pointerId); e.stopPropagation(); e.preventDefault(); return; }
-    const idle = e.button === 0 && !S.tool && !S.placing && !S.puzzleMode && !resizing && !svg.matches(".annotating, .aiming") && !e.target.closest?.(".token, .obj") && !document.querySelector("#bar-ruler.on, #bar-ping.on");
-    if (e.button === 1 || (space && e.button === 0) || idle) { panning = { x: e.clientX, y: e.clientY, v: { ...(view || { x: 0, y: 0, w: W(), h: H() }) } }; svg.setPointerCapture(e.pointerId); svg.classList.add("panning"); e.stopPropagation(); e.preventDefault(); }
+    const idle = e.button === 0 && !S.tool && !S.placing && !S.puzzleMode && !resizing && !svg.matches(".aiming") && !e.target.closest?.(".token, .obj") && !document.querySelector("#bar-ruler.on, #bar-ping.on");
+    if (e.button === 1 || (space && e.button === 0) || idle) { panning = { x: e.clientX, y: e.clientY, v: { ...(view || { x: X(), y: Y(), w: W(), h: H() }) } }; svg.setPointerCapture(e.pointerId); svg.classList.add("panning"); e.stopPropagation(); e.preventDefault(); }
   }, true);
   svg.addEventListener("pointermove", (e) => {
     if (touches.has(e.pointerId)) touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (pinch && touches.size >= 2) {   // two fingers: zoom by the spread, pan by the midpoint
       const [a, b] = [...touches.values()], d = Math.hypot(a.x - b.x, a.y - b.y), cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2;
-      const v = view || { x: 0, y: 0, w: W(), h: H() }, k = v.w / svg.clientWidth, p = toMap({ clientX: cx, clientY: cy });
+      const v = view || { x: X(), y: Y(), w: W(), h: H() }, k = v.w / svg.clientWidth, p = toMap({ clientX: cx, clientY: cy });
       zoomBy(pinch.d / Math.max(d, 1), p.x, p.y);
       const v2 = view; if (v2) { v2.x -= (cx - pinch.cx) * k; v2.y -= (cy - pinch.cy) * k; applyView(); }
       pinch = { d, cx, cy }; e.stopPropagation(); return;
@@ -81,9 +84,8 @@ export function initView() {
   document.addEventListener("keyup", (e) => { if (e.code === "Space") { space = false; svg.classList.remove("pannable"); } });
   let busy = false;
   const off = (...ids) => { busy = true; ids.forEach((i) => { const b = document.getElementById("bar-" + i); if (b?.classList.contains("on")) b.click(); }); busy = false; };
-  const sel = addBarButton({ quick: true, id: "select", icon: "👆", label: "Select", title: "Select: click things to select them (3D: opens their menu)", toggle: true, onClick: (e, b) => { S.select3d = b.classList.contains("on"); if (S.select3d) off("ruler", "ping", "orbit"); S.v3d?.clearSelection(); } });
-  addBarButton({ quick: true, id: "orbit", icon: "🔄", label: "Orbit", title: "Orbit (3D): drag anywhere to turn the camera; tokens will not be picked up", toggle: true, onClick: (e, b) => { S.orbit = b.classList.contains("on"); S.v3d?.setOrbit(S.orbit); if (S.orbit) off("ruler", "ping", "select"); } });
-  setTimeout(() => ["ruler", "ping"].forEach((i) => document.getElementById("bar-" + i)?.addEventListener("click", () => { if (S.select3d && !busy) sel.click(); if (S.orbit && !busy) document.getElementById("bar-orbit")?.click(); })), 0);
+  const sel = addBarButton({ quick: true, id: "select", icon: "👆", label: "Select", title: "Select: click things to select them (3D: opens their menu)", toggle: true, onClick: (e, b) => { S.select3d = b.classList.contains("on"); if (S.select3d) off("ruler", "ping"); S.v3d?.clearSelection(); } });
+  setTimeout(() => ["ruler", "ping"].forEach((i) => document.getElementById("bar-" + i)?.addEventListener("click", () => { if (S.select3d && !busy) sel.click(); })), 0);
   addBarButton({ quick: true, id: "fit", icon: "⤢", label: "Fit", title: "Show the whole map", onClick: fitView });
   addBarButton({ quick: true, id: "grid", icon: "▦", label: "Grid", title: "Show the grid; in the top-down view drag the map edge to resize it", gmOnly: true, toggle: true, onClick: (e, b) => {
     const on = b.classList.contains("on");

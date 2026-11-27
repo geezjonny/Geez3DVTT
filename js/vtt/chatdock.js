@@ -8,9 +8,9 @@ const CHAT_ROOM = "geez-table";   // fixed room name: everyone on the VTT lands 
 export function initChatDock() {
   const qs = new URLSearchParams(location.search), room = qs.get("room") || CHAT_ROOM;
   const get = (k) => { try { return localStorage.getItem(k); } catch { return null; } }, set = (k, v) => { try { localStorage.setItem(k, v); } catch { /* fine */ } };
-  // GM (?gm) joins as "GM"; players use ?name=, else their VTT "Me" character (so the call name matches their token), else the name they typed last time.
+  // The GM page joins as "GM"; players use ?name=, else their VTT "Me" character (so the call name matches their token), else the name they typed last time.
   const myName = () => {
-    if (qs.has("gm")) return "GM";
+    if (document.documentElement.dataset.role === "gm") return "GM";
     let me = null; try { me = JSON.parse(localStorage.getItem("vtt-me")); } catch { /* none */ }
     return qs.get("name") || me?.name || get("geez.videochat.name") || "";
   };

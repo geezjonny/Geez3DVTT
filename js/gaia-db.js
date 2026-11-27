@@ -19,7 +19,7 @@
     const pendingEvents=[];
     const watchers = new Set(), oldToNew = new Map(), newToOld = new Map(), sheetIds = new Map();
     const qs = new URLSearchParams(location.search);
-    const player = opts.gm ? false : qs.has('player') || !(qs.get('gm') === 'jonny' || qs.has('gmjonny'));
+    const player = opts.gm != null ? !opts.gm : qs.has('player') || !(qs.get('gm') === 'jonny' || qs.has('gmjonny'));
     let selected = opts.pc || qs.get('pc') || qs.get('char') || localStorage.getItem('geezvtt.player.'+(qs.get('campaign')||localStorage.getItem('geezvtt.player.lastCampaign')||'world__daddies')+'.name') || '';
     const selectedId = () => oldToNew.get(selected) || raw?.entities.find(e=>e.kind==='pc'&&e.name===selected)?.id || selected;
     const identity = () => player ? 'player:' + selectedId() : 'gm';

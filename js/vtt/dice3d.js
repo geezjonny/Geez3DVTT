@@ -38,7 +38,7 @@ export async function createDiceTray3D(container) {
   layer.style.cssText = 'position:absolute;inset:0;pointer-events:none;overflow:hidden';
   const style = document.createElement('style');
   style.textContent = `.d3-tag{position:absolute;transform:translate(-50%,-100%);text-align:center;pointer-events:none;white-space:nowrap;z-index:2;color:#fff;text-shadow:0 2px 4px #000}
-.d3-tag .who{font:600 12px system-ui}.d3-tag .num{font:900 30px/1 Georgia,serif}.d3-tag .how{font:11px system-ui;color:#d2cbbf}
+.d3-tag .who{font:600 12px system-ui}.d3-tag .num{font:900 30px/1 system-ui,sans-serif}.d3-tag .how{font:11px system-ui;color:#d2cbbf}
 .d3-tag .num.ok{color:#7fd69a}.d3-tag .num.bad{color:#e2574c}.d3-tag .num.crit{color:#ffd86b}`;
   layer.appendChild(style);
   container.append(canvas, layer);
@@ -163,7 +163,7 @@ export async function createDiceTray3D(container) {
     ctx.fillRect(0, 0, 256, 256);
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.font = 'bold 76px Georgia, serif';
+    ctx.font = 'bold 76px system-ui, sans-serif';
     ctx.lineWidth = 6;
     ctx.strokeStyle = '#251b18';
     ctx.strokeText(String(value), 128, 132);

@@ -12,7 +12,6 @@ import { isCurrentlyVisible } from "./explored-vtt.js";
 import { getRefImage } from "./refimage.js";
 import { doorSeg } from "./reach.js";
 import { CONDITIONS, conditionsOf } from "./conditions.js";
-import { normalizeAnnotation, visibleAnnotations } from "./annotation-geometry.js";
 
 const U = 40, THICK = 0.22, clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const stored = (k, d) => { try { return localStorage.getItem("geez3d." + k) ?? d; } catch { return d; } };
@@ -39,7 +38,7 @@ if (choice !== "auto" && !PRESETS[choice]) choice = "auto";
 let level = choice === "auto" ? guessQuality() : choice, Q = PRESETS[level];
 
 /* ---------------- shared shader pieces ---------------- */
-const U3 = { uLM: { value: null }, uFog: { value: null }, uSize: { value: new THREE.Vector2(1, 1) }, uGain: { value: 1 }, uSat: { value: 1 }, uTime: { value: 0 }, uPx: { value: 1 }, uCarry: { value: Array.from({ length: 12 }, () => new THREE.Vector4()) } };
+const U3 = { uLM: { value: null }, uFog: { value: null }, uSize: { value: new THREE.Vector2(1, 1) }, uOrigin: { value: new THREE.Vector2(0, 0) }, uGain: { value: 1 }, uSat: { value: 1 }, uTime: { value: 0 }, uPx: { value: 1 }, uCarry: { value: Array.from({ length: 12 }, () => new THREE.Vector4()) } };
 const WORLD_POS = `#include <fog_vertex>
   vec4 wp4 = vec4(transformed, 1.0);
   #ifdef USE_INSTANCING
@@ -48,11 +47,11 @@ const WORLD_POS = `#include <fog_vertex>
   vWp = (modelMatrix * wp4).xyz;`;
 function lit(material) {
   material.onBeforeCompile = (s) => {
-    Object.assign(s.uniforms, { uLM: U3.uLM, uFog: U3.uFog, uSize: U3.uSize, uGain: U3.uGain, uSat: U3.uSat, uCarry: U3.uCarry });
+    Object.assign(s.uniforms, { uLM: U3.uLM, uFog: U3.uFog, uSize: U3.uSize, uOrigin: U3.uOrigin, uGain: U3.uGain, uSat: U3.uSat, uCarry: U3.uCarry });
     s.vertexShader = "varying vec3 vWp;\n" + s.vertexShader.replace("#include <fog_vertex>", WORLD_POS);
-    s.fragmentShader = "uniform sampler2D uLM, uFog; uniform vec2 uSize; uniform float uGain, uSat; uniform vec4 uCarry[12]; varying vec3 vWp;\n" + s.fragmentShader.replace("#include <opaque_fragment>", `
+    s.fragmentShader = "uniform sampler2D uLM, uFog; uniform vec2 uSize, uOrigin; uniform float uGain, uSat; uniform vec4 uCarry[12]; varying vec3 vWp;\n" + s.fragmentShader.replace("#include <opaque_fragment>", `
       vec3 fn = normalize(cross(dFdx(vWp), dFdy(vWp)));
-      vec3 glow = texture2D(uLM, (vWp.xz + fn.xz * 0.25) / uSize).rgb * uGain * mix(0.55, 1.0, abs(fn.y));
+      vec3 glow = texture2D(uLM, (vWp.xz + fn.xz * 0.25 - uOrigin) / uSize).rgb * uGain * mix(0.55, 1.0, abs(fn.y));
       outgoingLight = mix(vec3(dot(outgoingLight, vec3(0.3, 0.59, 0.11))), outgoingLight, uSat); // moonlight drains colour
       for (int i = 0; i < 12; i++) { // x, z, radius, strength
         if (uCarry[i].w <= 0.0) continue;
@@ -60,8 +59,9 @@ function lit(material) {
         glow += vec3(1.0, 0.55, 0.22) * (near * near * uCarry[i].w);
       }
       outgoingLight += diffuseColor.rgb * glow / (1.0 + glow * 0.5);
-      float edge = min(min(vWp.x, uSize.x - vWp.x), min(vWp.z, uSize.y - vWp.z));
-      outgoingLight *= (0.5 + 0.5 * smoothstep(0.0, 3.0, edge)) * texture2D(uFog, (vWp.xz + fn.xz * 0.35) / uSize).r; // fog of war
+      vec2 inMap = vWp.xz - uOrigin;
+      float edge = min(min(inMap.x, uSize.x - inMap.x), min(inMap.y, uSize.y - inMap.y));
+      outgoingLight *= (0.5 + 0.5 * smoothstep(0.0, 3.0, edge)) * texture2D(uFog, (vWp.xz + fn.xz * 0.35 - uOrigin) / uSize).r; // fog of war
       #include <opaque_fragment>`);
   };
   material.customProgramCacheKey = () => "geez-lit";
@@ -70,10 +70,10 @@ function lit(material) {
 // Floors you are not on: no map lights, no shadows, just dim, and only where that floor has been seen.
 function dimmed(material, mask) {
   material.onBeforeCompile = (s) => {
-    Object.assign(s.uniforms, { uMask: { value: mask }, uSize: U3.uSize });
+    Object.assign(s.uniforms, { uMask: { value: mask }, uSize: U3.uSize, uOrigin: U3.uOrigin });
     s.vertexShader = "varying vec3 vWp;\n" + s.vertexShader.replace("#include <fog_vertex>", WORLD_POS);
-    s.fragmentShader = "uniform sampler2D uMask; uniform vec2 uSize; varying vec3 vWp;\n" + s.fragmentShader.replace("#include <opaque_fragment>", `
-      float seen = texture2D(uMask, vWp.xz / uSize).r;
+    s.fragmentShader = "uniform sampler2D uMask; uniform vec2 uSize, uOrigin; varying vec3 vWp;\n" + s.fragmentShader.replace("#include <opaque_fragment>", `
+      float seen = texture2D(uMask, (vWp.xz - uOrigin) / uSize).r;
       if (seen < 0.15) discard;
       outgoingLight *= 0.42 * seen;
       #include <opaque_fragment>`);
@@ -84,28 +84,28 @@ function dimmed(material, mask) {
 // Flames and glows are unlit, but must still vanish in the dark.
 function fogged(material, flicker = false) {
   material.onBeforeCompile = (s) => {
-    Object.assign(s.uniforms, { uFog: U3.uFog, uSize: U3.uSize, uTime: U3.uTime });
+    Object.assign(s.uniforms, { uFog: U3.uFog, uSize: U3.uSize, uOrigin: U3.uOrigin, uTime: U3.uTime });
     let v = s.vertexShader.replace("#include <fog_vertex>", WORLD_POS);
     if (flicker) v = v.replace("#include <begin_vertex>", `#include <begin_vertex>
       transformed.xz *= 1.0 + 0.18 * sin(uTime * 11.0 + instanceMatrix[3][0] * 7.0);
       transformed.y *= 1.0 + 0.25 * sin(uTime * 7.0 + instanceMatrix[3][2] * 5.0);`);
     s.vertexShader = "uniform float uTime; varying vec3 vWp;\n" + v;
-    s.fragmentShader = "uniform sampler2D uFog; uniform vec2 uSize; varying vec3 vWp;\n" + s.fragmentShader.replace("#include <opaque_fragment>", `
-      if (texture2D(uFog, vWp.xz / uSize).r < 0.8) discard;
+    s.fragmentShader = "uniform sampler2D uFog; uniform vec2 uSize, uOrigin; varying vec3 vWp;\n" + s.fragmentShader.replace("#include <opaque_fragment>", `
+      if (texture2D(uFog, (vWp.xz - uOrigin) / uSize).r < 0.8) discard;
       #include <opaque_fragment>`);
   };
   material.customProgramCacheKey = () => "geez-fogged" + flicker;
   return material;
 }
 const emberMaterial = () => new THREE.ShaderMaterial({
-  uniforms: { uTime: U3.uTime, uPx: U3.uPx, uFog: U3.uFog, uSize: U3.uSize }, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
-  vertexShader: `attribute float seed; uniform float uTime, uPx; uniform sampler2D uFog; uniform vec2 uSize; varying float vLife;
+  uniforms: { uTime: U3.uTime, uPx: U3.uPx, uFog: U3.uFog, uSize: U3.uSize, uOrigin: U3.uOrigin }, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+  vertexShader: `attribute float seed; uniform float uTime, uPx; uniform sampler2D uFog; uniform vec2 uSize, uOrigin; varying float vLife;
     void main() {
       float t = fract(uTime * (0.35 + fract(seed * 7.3) * 0.3) + seed);
       vec3 p = position + vec3(sin(seed * 40.0 + uTime * 2.0) * 0.18 * t, t * 0.9, cos(seed * 23.0 + uTime * 1.7) * 0.18 * t);
       vec4 mv = modelViewMatrix * vec4(p, 1.0);
       gl_Position = projectionMatrix * mv; gl_PointSize = clamp(uPx * 0.045 / -mv.z, 1.0, 5.0);
-      vLife = (1.0 - t) * step(0.8, texture2D(uFog, position.xz / uSize).r);
+      vLife = (1.0 - t) * step(0.8, texture2D(uFog, (position.xz - uOrigin) / uSize).r);
     }`,
   fragmentShader: `varying float vLife; void main() { gl_FragColor = vec4(1.0, 0.25 + 0.45 * vLife, 0.05, vLife); }`
 });
@@ -148,7 +148,7 @@ function makeRenderer() {
   host.prepend(renderer.domElement);
   controls = new MapControls(camera, renderer.domElement);
   controls.enableDamping = true; controls.dampingFactor = 0.15; controls.maxPolarAngle = 1.35; controls.minDistance = 2.5; controls.maxDistance = 220;
-  controls.mouseButtons = { LEFT: orbitTool ? THREE.MOUSE.ROTATE : THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.ROTATE, RIGHT: THREE.MOUSE.ROTATE };
+  controls.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.ROTATE, RIGHT: THREE.MOUSE.ROTATE };
   if (target) controls.target.copy(target);
   controls.addEventListener("change", () => { dirty = true; });
   lockView(); applyControls(); fpLook(renderer.domElement); resize();
@@ -174,7 +174,6 @@ function setLevel(next) {
 }
 function resize() {
   if (!host) return;
-  const hb = document.querySelector("header")?.getBoundingClientRect().bottom; if (hb) host.style.top = hb + "px";
   if (!renderer) return; const w = host.clientWidth || 800, h = host.clientHeight || 560;
   renderer.setSize(w, h); camera.aspect = w / h; camera.updateProjectionMatrix(); dirty = true;
 }
@@ -233,10 +232,10 @@ function canvasTexture(w, h, draw) {
   const c = document.createElement("canvas"); c.width = w; c.height = h; draw(c.getContext("2d"), w, h);
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
 }
-function sprite(text, { color = "#f0e2c0", size = 0.34, bg = "#0c0a0acc" } = {}) {
-  const probe = document.createElement("canvas").getContext("2d"); probe.font = "600 40px Georgia";
+function sprite(text, { color = "#e6ebf1", size = 0.34, bg = "#0c0a0acc" } = {}) {
+  const probe = document.createElement("canvas").getContext("2d"); probe.font = "600 40px system-ui";
   const w = Math.ceil(probe.measureText(text).width) + 24;
-  const tex = canvasTexture(w, 56, (g) => { g.fillStyle = bg; g.beginPath(); g.roundRect(0, 0, w, 56, 10); g.fill(); g.font = "600 40px Georgia"; g.textAlign = "center"; g.textBaseline = "middle"; g.fillStyle = color; g.fillText(text, w / 2, 30); });
+  const tex = canvasTexture(w, 56, (g) => { g.fillStyle = bg; g.beginPath(); g.roundRect(0, 0, w, 56, 10); g.fill(); g.font = "600 40px system-ui"; g.textAlign = "center"; g.textBaseline = "middle"; g.fillStyle = color; g.fillText(text, w / 2, 30); });
   const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, fog: false }));
   s.scale.set(size * w / 56, size, 1); s.raycast = () => {}; return s;
 }
@@ -373,19 +372,20 @@ function levels() { // every floor that has anything on it, plus the one you are
 }
 // What a floor's map picture is right now (the current floor honours the Reference show/hide button).
 const pictureOf = (lv) => (lv === nowLv() ? getRefImage() && { url: getRefImage().dataUrl, cols: getRefImage().cols, rows: getRefImage().rows } : S.pictures?.[lv]) || null;
-// One floor painted flat: ground, floor swatches, map picture, placed images. The bottom floor is solid; higher floors
+// One floor painted flat: ground, map picture, floor swatches drawn over it, placed images. The bottom floor is solid; higher floors
 // are see-through where they have nothing, so the floors under them show.
 function floorCanvas(lv, maxSize, solid) {
-  const { cols, rows } = mapSize(), pic = pictureOf(lv), img = pic && cachedImage(pic.url);
+  const { cols, rows, x: x0, y: y0 } = mapSize(), pic = pictureOf(lv), img = pic && cachedImage(pic.url);
   const floors = Object.values(S.map.floors || {}).filter((a) => lvOf(a) === lv), images = Object.values(S.map.images || {}).filter((a) => a?.url && lvOf(a) === lv);
   const ppc = Math.min(64, maxSize / Math.max(cols, rows), img ? Math.max(24, img.naturalWidth / (pic.cols || cols)) : 48);
   const c = document.createElement("canvas"); c.width = Math.max(1, Math.round(cols * ppc)); c.height = Math.max(1, Math.round(rows * ppc));
-  const g = c.getContext("2d"); g.setTransform(c.width / cols, 0, 0, c.height / rows, 0, 0);
+  const g = c.getContext("2d"); g.setTransform(c.width / cols, 0, 0, c.height / rows, -x0 * c.width / cols, -y0 * c.height / rows);
   if (solid) {
-    g.fillStyle = "#26221f"; g.fillRect(0, 0, cols, rows);
+    g.fillStyle = "#26221f"; g.fillRect(x0, y0, cols, rows);
     const rnd = random(11);
-    for (let i = 0; i < cols * rows * 3; i++) { g.fillStyle = rnd() > 0.5 ? "rgba(255,240,220,0.035)" : "rgba(0,0,0,0.16)"; g.beginPath(); g.arc(rnd() * cols, rnd() * rows, 0.03 + rnd() * 0.12, 0, 7); g.fill(); }
+    for (let i = 0; i < cols * rows * 3; i++) { g.fillStyle = rnd() > 0.5 ? "rgba(255,240,220,0.035)" : "rgba(0,0,0,0.16)"; g.beginPath(); g.arc(x0 + rnd() * cols, y0 + rnd() * rows, 0.03 + rnd() * 0.12, 0, 7); g.fill(); }
   }
+  if (img) g.drawImage(img, 0, 0, pic.cols || cols, pic.rows || rows);
   for (const a of floors) {
     const x = a.x / U, z = a.y / U, w = a.w / U, h = a.h / U;
     g.fillStyle = FLOOR_COL[a.mat] || "#5c5346"; g.fillRect(x, z, w, h);
@@ -395,7 +395,6 @@ function floorCanvas(lv, maxSize, solid) {
       g.strokeStyle = "rgba(0,0,0,0.25)"; g.lineWidth = 0.025; g.strokeRect(cx, cz, 1, 1);
     }
   }
-  if (img) g.drawImage(img, 0, 0, pic.cols || cols, pic.rows || rows);
   for (const a of images) { const im = cachedImage(a.url); if (im) { g.globalAlpha = a.op ?? 1; g.drawImage(im, a.x / U, a.y / U, a.w / U, a.h / U); g.globalAlpha = 1; } }
   return c;
 }
@@ -403,12 +402,12 @@ function floorTexture(canvas) {
   const tex = new THREE.CanvasTexture(canvas); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy()); return tex;
 }
 function ground(into, material, y = 0) {
-  const { cols, rows } = mapSize(), floor = new THREE.Mesh(new THREE.PlaneGeometry(cols, rows).rotateX(-Math.PI / 2), material);
-  floor.position.set(cols / 2, y, rows / 2); into.add(floor); return floor;
+  const { cols, rows, x, y: z } = mapSize(), floor = new THREE.Mesh(new THREE.PlaneGeometry(cols, rows).rotateX(-Math.PI / 2), material);
+  floor.position.set(x + cols / 2, y, z + rows / 2); into.add(floor); return floor;
 }
 function slab(into) { // the block of earth the whole stack stands on
-  const { cols, rows } = mapSize(), m = new THREE.Mesh(boxGeo(cols + 0.4, 0.9, rows + 0.4), new THREE.MeshLambertMaterial({ color: 0x17121a, flatShading: true }));
-  m.position.set(cols / 2, -0.47, rows / 2); into.add(m);
+  const { cols, rows, x, y } = mapSize(), m = new THREE.Mesh(boxGeo(cols + 0.4, 0.9, rows + 0.4), new THREE.MeshLambertMaterial({ color: 0x17121a, flatShading: true }));
+  m.position.set(x + cols / 2, -0.47, y + rows / 2); into.add(m);
 }
 
 let sampler = null; // small copy of the current floor picture, used to tint stone to match the art
@@ -426,9 +425,9 @@ function buildFloor(bottom) {
   }
 }
 function stone(x, z, rnd, matName) {
-  const base = new THREE.Color(WALL_COL[matName] ?? 0x5d6268), { cols, rows } = mapSize();
+  const base = new THREE.Color(WALL_COL[matName] ?? 0x5d6268), { cols, rows, x: x0, y: y0 } = mapSize();
   if (!WALL_COL[matName] && sampler) {
-    const px = clamp(Math.round(x / cols * sampler.width), 1, sampler.width - 2), pz = clamp(Math.round(z / rows * sampler.height), 1, sampler.height - 2);
+    const px = clamp(Math.round((x - x0) / cols * sampler.width), 1, sampler.width - 2), pz = clamp(Math.round((z - y0) / rows * sampler.height), 1, sampler.height - 2);
     let r = 0, g = 0, b = 0, n = 0;
     for (let i = -1; i <= 1; i++) for (let k = -1; k <= 1; k++) { const o = ((pz + k) * sampler.width + px + i) * 4; if (sampler.data[o + 3] > 8) { r += sampler.data[o]; g += sampler.data[o + 1]; b += sampler.data[o + 2]; n++; } }
     if (n) base.lerp(new THREE.Color().setRGB(r / n / 255, g / n / 255, b / n / 255, THREE.SRGBColorSpace), 0.35);
@@ -564,7 +563,7 @@ function rune(id, o) {
   g.userData.pick = { type: "object", id };
   const cells = o.kind === "tripwire" ? o.len || 3 : 1;
   for (let i = 0; i < cells; i++) {
-    const tex = canvasTexture(96, 96, (c) => { c.strokeStyle = color; c.lineWidth = 5; c.globalAlpha = o.hidden ? 0.5 : 1; if (o.hidden) c.setLineDash([10, 8]); c.fillStyle = on ? color + "66" : "#00000066"; c.beginPath(); c.roundRect(8, 8, 80, 80, 14); c.fill(); c.stroke(); c.setLineDash([]); c.fillStyle = color; c.font = "56px Georgia"; c.textAlign = "center"; c.textBaseline = "middle"; c.fillText(icon, 48, 52); });
+    const tex = canvasTexture(96, 96, (c) => { c.strokeStyle = color; c.lineWidth = 5; c.globalAlpha = o.hidden ? 0.5 : 1; if (o.hidden) c.setLineDash([10, 8]); c.fillStyle = on ? color + "66" : "#00000066"; c.beginPath(); c.roundRect(8, 8, 80, 80, 14); c.fill(); c.stroke(); c.setLineDash([]); c.fillStyle = color; c.font = "56px system-ui"; c.textAlign = "center"; c.textBaseline = "middle"; c.fillText(icon, 48, 52); });
     const m = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.9).rotateX(-Math.PI / 2), fogged(new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false })));
     m.position.set(o.x / U + (o.dir === "v" ? 0 : i), 0.03, o.y / U + (o.dir === "v" ? i : 0)); g.add(m);
   }
@@ -623,14 +622,14 @@ function buildOtherFloor(lv, bottom) {
 
 let hitMesh = null, hitIds = [], staticSig = "", roofs = [], gridLines = null, gridOn = true;
 function signature() {
-  const { cols, rows } = mapSize(), lv = nowLv();
+  const { cols, rows, x, y } = mapSize(), lv = nowLv();
   const objects = Object.entries(S.objects).map(([id, o]) => { if (o.kind !== "door" || lvOf(o) !== lv) return [id, o]; const { state, locked, ...rest } = o; return [id, { ...rest, shut: o.doorKind === "secret" || o.win ? state : null }]; });
   const pictures = levels().map((l) => { const p = pictureOf(l); return p && [l, p.url.length, p.url.slice(-32), !!cachedImage(p.url)]; });
   const images = Object.values(S.map.images || {}).map((a) => [a, !!(a?.url && cachedImage(a.url))]);
-  return JSON.stringify([cols, rows, lv, level, WALL_H, S.map.floors, S.map.walls, S.map.props, S.map.roofs, S.map.labels, images, pictures, objects]);
+  return JSON.stringify([cols, rows, x, y, lv, level, WALL_H, S.map.floors, S.map.walls, S.map.props, S.map.roofs, S.map.labels, images, pictures, objects]);
 }
 function buildStatic() {
-  const { cols, rows } = mapSize(), sig = signature();
+  const { cols, rows, x: x0, y: y0 } = mapSize(), sig = signature();
   data = plan(nowLv());
   data.lights = Object.entries(S.objects).filter(([, o]) => o.kind === "light" && o.state === "on" && here(o) && canExist(o)).map(([id, o]) => ({ id, x: o.x / U, z: o.y / U, range: (o.radius || 120) / U, power: clamp(0.35 + (Number(o.intensity) || 1) * 0.55, 0.4, 1.2), color: o.color || "#ffb347" }));
   if (sig === staticSig) return false;
@@ -652,7 +651,7 @@ function buildStatic() {
     roofs.push({ a, m }); world.add(m);
   }
   for (const [id, o] of Object.entries(S.objects)) if (here(o) && canExist(o) && o.kind !== "door" && o.kind !== "light") rune(id, o);
-  for (const a of Object.values(S.map.labels || {})) if (here(a) && seenByRules(a)) { const s = sprite(a.text || "", { color: a.color && a.color !== "#3d2632" ? a.color : "#f0e2c0", size: 0.45 * (a.size || 1) }); s.position.set(a.x / U, H + 0.3, a.y / U); world.add(s); }
+  for (const a of Object.values(S.map.labels || {})) if (here(a) && seenByRules(a)) { const s = sprite(a.text || "", { color: a.color && a.color !== "#3d2632" ? a.color : "#e6ebf1", size: 0.45 * (a.size || 1) }); s.position.set(a.x / U, H + 0.3, a.y / U); world.add(s); }
   // invisible boxes that make walls, doors and lights easy to click
   const hits = []; hitIds = [];
   const hit = (type, id, m) => { hits.push({ m }); hitIds.push({ type, id }); };
@@ -665,13 +664,13 @@ function buildStatic() {
   }
   hitMesh = instances(boxGeo(1, 1, 1), new THREE.MeshBasicMaterial(), hits, { shadows: false });
   if (hitMesh) hitMesh.visible = false;
-  const pts = []; for (let c = 0; c <= cols; c++) pts.push(c, 0, 0, c, 0, rows); for (let r = 0; r <= rows; r++) pts.push(0, 0, r, cols, 0, r);
+  const pts = []; for (let c = x0; c <= x0 + cols; c++) pts.push(c, 0, y0, c, 0, y0 + rows); for (let r = y0; r <= y0 + rows; r++) pts.push(x0, 0, r, x0 + cols, 0, r);
   gridLines = new THREE.LineSegments(new THREE.BufferGeometry().setAttribute("position", new THREE.Float32BufferAttribute(pts, 3)), new THREE.LineBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.28 }));
   gridLines.position.y = 0.014; gridLines.visible = gridOn; world.add(gridLines);
-  const size = Math.hypot(cols, rows) / 2, cx = cols / 2, cz = rows / 2;
+  const size = Math.hypot(cols, rows) / 2, cx = x0 + cols / 2, cz = y0 + rows / 2;
   sun.target.position.set(cx, 0, cz); sun.position.set(cx - size * 0.7, size * 1.1, cz + size * 0.5); sun.castShadow = Q.shadow > 0;
   if (sun.castShadow) { sun.shadow.mapSize.set(Q.shadow, Q.shadow); sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.03; Object.assign(sun.shadow.camera, { left: -size - 2, right: size + 2, top: size + 2, bottom: -size - 2, near: 0.5, far: size * 4 }); sun.shadow.camera.updateProjectionMatrix(); }
-  U3.uSize.value.set(cols, rows); renderer.shadowMap.needsUpdate = true;
+  U3.uSize.value.set(cols, rows); U3.uOrigin.value.set(x0, y0); renderer.shadowMap.needsUpdate = true;
   return true;
 }
 
@@ -679,11 +678,11 @@ function buildStatic() {
 const lightCanvas = document.createElement("canvas"), polys = new Map();
 let lightSig = "", wallKeyNow = "";
 function bakeLights() {
-  const { cols, rows } = mapSize();
+  const { cols, rows, x: x0, y: y0 } = mapSize();
   const closed = data.doors.filter((d) => !d.window && !doorOpen(d.id) && !lifts(d)).map((d) => d.seg);
   const walls = data.walls.filter((w) => !w.door).map((w) => w.seg).concat(closed);
   const lights = data.lights;
-  const wallKey = JSON.stringify(walls), sig = wallKey + JSON.stringify(lights) + cols + "," + rows + level;
+  const wallKey = JSON.stringify(walls), sig = wallKey + JSON.stringify(lights) + [cols, rows, x0, y0] + level;
   if (sig === lightSig && U3.uLM.value) return;
   lightSig = sig;
   if (wallKeyNow !== wallKey || polys.size > 600) { polys.clear(); wallKeyNow = wallKey; }
@@ -694,7 +693,7 @@ function bakeLights() {
   }
   const g = lightCanvas.getContext("2d");
   g.setTransform(1, 0, 0, 1, 0, 0); g.globalCompositeOperation = "source-over"; g.fillStyle = "#000"; g.fillRect(0, 0, w, h);
-  g.setTransform(w / cols, 0, 0, h / rows, 0, 0); g.globalCompositeOperation = "lighter";
+  g.setTransform(w / cols, 0, 0, h / rows, -x0 * w / cols, -y0 * h / rows); g.globalCompositeOperation = "lighter";
   for (const l of lights) {
     const r = l.range * 1.25, k = `${l.x.toFixed(2)},${l.z.toFixed(2)},${r}`;
     let poly = polys.get(k); if (!poly) polys.set(k, poly = visibility(l.x, l.z, r, walls));
@@ -706,10 +705,10 @@ function bakeLights() {
   U3.uLM.value.needsUpdate = true; dirty = true;
 }
 function paintMask(tex, value) { // value(x, y) -> 0..255 for each cell
-  const { cols, rows } = mapSize(), px = tex.image.data;
+  const { cols, rows, x: x0, y: y0 } = mapSize(), px = tex.image.data;
   let changed = false;
   for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) {
-    const v = value(x, y), i = (y * cols + x) * 4;
+    const v = value(x0 + x, y0 + y), i = (y * cols + x) * 4;
     if (px[i] !== v) { px[i] = px[i + 1] = px[i + 2] = v; changed = true; }
   }
   if (changed || !tex.version) { tex.needsUpdate = true; dirty = true; }
@@ -730,7 +729,7 @@ function easeFog(dt) { // move each cell toward its target; full fade takes unde
 }
 // Fog of war, one texel per cell (smoothed by the GPU). Players: unseen is black, remembered is dim, in sight is clear.
 function updateFog() {
-  const { cols, rows } = mapSize();
+  const { cols, rows, x: x0, y: y0 } = mapSize();
   if (!U3.uFog.value || U3.uFog.value.image.width !== cols || U3.uFog.value.image.height !== rows) {
     U3.uFog.value?.dispose(); U3.uFog.value = new THREE.DataTexture(new Uint8Array(cols * rows * 4).fill(255), cols, rows, THREE.RGBAFormat);
     U3.uFog.value.magFilter = U3.uFog.value.minFilter = THREE.LinearFilter;
@@ -746,7 +745,7 @@ function updateFog() {
     if (S.currentVisible?.has(cell) || !(memory || hidden)) return 255;
     return memory && S.exploredCells?.has(cell) ? REMEMBERED : 0;
   };
-  for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) fogTarget[y * cols + x] = value(x, y);
+  for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) fogTarget[y * cols + x] = value(x0 + x, y0 + y);
   if (fresh) paintMask(U3.uFog.value, value);
   for (const lv of levels()) if (lv !== nowLv()) {
     const shut = coveredOn(lv), seen = S.exploredByLevel?.[lv];
@@ -762,7 +761,7 @@ function tokenArt(t, id, i, entry) {
   const draw = (g, size, img) => {
     g.clearRect(0, 0, size, size); g.save(); g.beginPath(); g.arc(size / 2, size / 2, size / 2 - 4, 0, 7); g.fillStyle = "#17130f"; g.fill(); g.clip();
     if (img) { const k = Math.max(size / img.naturalWidth, size / img.naturalHeight), iw = img.naturalWidth * k, ih = img.naturalHeight * k; g.drawImage(img, (size - iw) / 2, (size - ih) / 2, iw, ih); }
-    else { g.fillStyle = ring; g.fillRect(0, 0, size, size); g.fillStyle = "#f0e2c0"; g.font = `700 ${size * 0.42}px Georgia`; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText((t.label || id).slice(0, 2), size / 2, size / 2); }
+    else { g.fillStyle = ring; g.fillRect(0, 0, size, size); g.fillStyle = "#f0e2c0"; g.font = `700 ${size * 0.42}px system-ui`; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText((t.label || id).slice(0, 2), size / 2, size / 2); }
     g.restore(); g.lineWidth = 7; g.strokeStyle = ring; g.stroke(); g.lineWidth = 2; g.strokeStyle = "#e8cf8a"; g.stroke();
   };
   const art = canvasTexture(192, 192, (g, size) => draw(g, size));
@@ -830,9 +829,9 @@ function syncTokens() {
 // whose token this screen walks; the view centres on it once, then stays where you put it
 export function setWalker(id) { if (walkingId !== id) { walkingId = id; framedFor = ""; pending = true; } }
 function frameMap() {
-  const { cols, rows } = mapSize(), lead = !S.isGM && walkingId && S.tokens[walkingId];
+  const { cols, rows, x: x0, y: y0 } = mapSize(), lead = !S.isGM && walkingId && S.tokens[walkingId];
   const aspect = Math.max(0.4, camera.aspect), dist = lead ? 14 : Math.max(rows, cols / aspect) * (topDown ? 1.32 : 1.15) + (topDown ? 1 : 3);
-  const cx = lead ? lead.x / U : cols / 2, cz = lead ? lead.y / U : rows * (topDown ? 0.5 : 0.56), tilt = topDown ? 1e-4 : 0.75;
+  const cx = lead ? lead.x / U : x0 + cols / 2, cz = lead ? lead.y / U : y0 + rows * (topDown ? 0.5 : 0.56), tilt = topDown ? 1e-4 : 0.75;
   controls.target.set(cx, 0, cz); camera.position.set(cx, Math.cos(tilt) * dist, cz + Math.sin(tilt) * dist); controls.update(); dirty = true;
 }
 export function heading() { // the way "forward" points on the map for the current camera
@@ -848,8 +847,6 @@ const aim = (clientX, clientY) => { const r = renderer.domElement.getBoundingCli
 export const isOpen = () => !!host && !host.hidden;
 export function zoom(f) { const o = camera.position.clone().sub(controls.target).multiplyScalar(clamp(f, 0.3, 3)); camera.position.copy(controls.target).add(o); controls.update(); dirty = true; } // above 1 moves away
 export function fit() { frameMap(); }
-let orbitTool = false;
-export function setOrbit(on) { orbitTool = !!on; if (controls) controls.mouseButtons.LEFT = orbitTool ? THREE.MOUSE.ROTATE : THREE.MOUSE.PAN; }
 let toolBlock = false;
 const applyControls = () => { if (controls) controls.enabled = !toolBlock && !fp; };
 export const controlsBlocked = () => toolBlock;
@@ -880,6 +877,15 @@ export function pickAt(clientX, clientY) {
 }
 export function clearSelection() { if (selRing) { fxRoot.remove(selRing); selRing = null; dirty = true; } }
 export function screenAt(mx, my) { const r = renderer.domElement.getBoundingClientRect(), v = new THREE.Vector3(mx / U, 0.1, my / U).project(camera); return { x: r.left + (v.x + 1) / 2 * r.width, y: r.top + (1 - v.y) / 2 * r.height }; }
+let ghost = null;
+// What a build tool is about to draw, as outlines on the floor: segments [x1, y1, x2, y2] in map pixels.
+export function preview(segs) {
+  if (ghost) { fxRoot.remove(ghost); disposeTree(ghost); ghost = null; dirty = true; }
+  if (!segs.length) return;
+  const points = segs.flatMap(([x1, y1, x2, y2]) => [new THREE.Vector3(x1 / U, 0.08, y1 / U), new THREE.Vector3(x2 / U, 0.08, y2 / U)]);
+  ghost = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(points), new THREE.LineBasicMaterial({ color: 0xffd56a, depthTest: false }));
+  ghost.renderOrder = 10; fxRoot.add(ghost); dirty = true;
+}
 let rulerObj = null;
 export function ruler(a, b) {
   if (rulerObj) { fxRoot.remove(rulerObj); disposeTree(rulerObj); rulerObj = null; }
@@ -917,7 +923,6 @@ export function setTopDown(on) {
   const offset = on ? new THREE.Vector3(0, dist, dist * 1e-4) : tilted ? tilted.setLength(dist) : new THREE.Vector3(0, Math.cos(0.75) * dist, Math.sin(0.75) * dist);
   camera.position.copy(controls.target).add(offset); controls.update(); dirty = true;
   document.body.classList.toggle("topdown", on);
-  if (marks) marks.visible = !on;
   tokens.forEach(placeToken);
   document.dispatchEvent(new Event("topdownchange"));
 }
@@ -927,8 +932,10 @@ export function pan(dx, dy) { // drag the top-down view by screen pixels
   controls.target.add(move); camera.position.add(move); controls.update(); dirty = true;
 }
 function syncFlat() { // keep the input layer's coordinates matching the floor on screen
-  const busy = !!(S.isGM && (S.tool || S.placing || S.puzzleMode)) || !!flat?.matches(".annotating, .aiming");
-  if (busy && !busyWas) setTopDown(true); // picking up a tool looks straight down
+  const building = !!(S.isGM && (S.tool || S.placing));   // the left button draws instead of panning
+  controls.mouseButtons.LEFT = building ? -1 : THREE.MOUSE.PAN; controls.touches.ONE = building ? -1 : THREE.TOUCH.PAN;
+  const busy = !!flat?.matches(".aiming"); // attack aiming still needs the flat layer
+  if (busy && !busyWas) setTopDown(true);
   busyWas = busy;
   if (!topDown || !flat) return;
   camera.updateMatrixWorld();
@@ -938,34 +945,6 @@ function syncFlat() { // keep the input layer's coordinates matching the floor o
   if (flat.getAttribute("viewBox") !== box) flat.setAttribute("viewBox", box);
   const place = { left: r.left + "px", top: r.top + "px", width: r.width + "px", height: r.height + "px" };
   for (const [k, v] of Object.entries(place)) if (flat.style[k] !== v) flat.style[k] = v;
-}
-
-/* Shared drawings, painted onto the floor for the tilted view. */
-let marks = null, marksSig = "";
-function drawMarks() {
-  const list = Object.values(visibleAnnotations(S.annotations || {})), { cols, rows } = mapSize(), sig = JSON.stringify([cols, rows, list]);
-  if (sig === marksSig) return;
-  marksSig = sig;
-  if (marks) { scene.remove(marks); disposeTree(marks); marks = null; }
-  if (!list.length) return;
-  const ppc = Math.min(32, 2048 / Math.max(cols, rows));
-  const tex = canvasTexture(Math.round(cols * ppc), Math.round(rows * ppc), (g, w, h) => {
-    g.setTransform(w / (cols * U), 0, 0, h / (rows * U), 0, 0); g.lineWidth = 4; g.lineCap = g.lineJoin = "round";
-    for (const raw of list) {
-      const a = normalizeAnnotation(raw), p = a.pts, first = p[0] || { x: 0, y: 0 }, end = p.at(-1) || first;
-      g.strokeStyle = g.fillStyle = a.color; g.beginPath();
-      if (a.type === "rectangle") g.rect(first.x, first.y, end.x - first.x, end.y - first.y);
-      else if (a.type === "circle") g.arc(first.x, first.y, Math.hypot(end.x - first.x, end.y - first.y), 0, 7);
-      else if (a.type === "text") { g.font = "700 26px Georgia"; g.fillText(a.text || "", first.x, first.y); }
-      else {
-        p.forEach((q, i) => g[i ? "lineTo" : "moveTo"](q.x, q.y));
-        if (a.type === "arrow") { const t = Math.atan2(end.y - first.y, end.x - first.x); for (const s of [-0.5, 0.5]) { g.moveTo(end.x, end.y); g.lineTo(end.x - Math.cos(t + s) * 16, end.y - Math.sin(t + s) * 16); } }
-      }
-      g.stroke();
-    }
-  });
-  marks = new THREE.Mesh(new THREE.PlaneGeometry(cols, rows).rotateX(-Math.PI / 2), fogged(new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false })));
-  marks.position.set(cols / 2, 0.035, rows / 2); marks.visible = !topDown; scene.add(marks); dirty = true;
 }
 
 /* ---------------- first person ---------------- */
@@ -991,9 +970,9 @@ let last = 0, drawn = 0, slow = 0, builtAt = 0;
 function refresh() {
   pending = false;
   if (buildStatic()) builtAt = performance.now();
-  bakeLights(); updateFog(); syncTokens(); drawMarks();
-  const key = `${mapSize().cols}x${mapSize().rows}`;
-  if (framedFor !== key) { framedFor = key; frameMap(); }   // a new map size re-frames
+  bakeLights(); updateFog(); syncTokens();
+  const size = S.map.size, key = size ? `${size.cols}x${size.rows}` : "default";
+  if (framedFor !== key) { const grew = size?.grown && framedFor && framedFor !== "default"; framedFor = key; if (!grew) frameMap(); }   // a new map re-frames; one grown by drawing does not
   dirty = true;
 }
 function loop(now) {

@@ -1,6 +1,6 @@
-// Shared UI bits: draggable floating windows (VTT bar, initiative, dice...) and small drop menus.
-// Window positions are remembered per id in localStorage.
-import { $ } from "./state.js";
+// Shared UI bits: draggable floating windows (toolbars, initiative, dice...) and small drop menus.
+// Window positions and sizes are remembered per id in localStorage.
+import { $, S } from "./state.js";
 
 const KEY = (id) => `vtt-win-${id}`;
 const load = (id) => { try { return JSON.parse(localStorage.getItem(KEY(id))); } catch { return null; } };
@@ -65,50 +65,55 @@ export function floatWindow({ id, title, x = 20, y = 80, closable = true, hidden
   bar.addEventListener("pointerup", () => { if (!d) return; for (const m of d.group) m.save(); d = null; el.classList.remove("drag"); });
   el.querySelector(".fwin-x")?.addEventListener("click", () => { el.hidden = true; el.dispatchEvent(new Event("fwin-close")); });
   addEventListener("resize", place);
+  // Every window is sized from its corner and its contents scale with its width (base = the width it opened at).
+  if (pos.w) { el.style.width = pos.w + "px"; if (pos.h) el.style.height = pos.h + "px"; }
+  let saving = 0;
+  new ResizeObserver(() => {
+    const width = el.offsetWidth; if (!width) return;
+    if (!el.style.width) return void (pos.base = width);   // not sized by hand yet: note its natural width
+    if (!el.dataset.noscale) for (const part of el.children) part.style.zoom = width / (pos.base ||= width);
+    pos.w = width; pos.h = parseFloat(el.style.height) || 0; clearTimeout(saving); saving = setTimeout(entry.save, 300);
+  }).observe(el);
   return { el, body, show: () => (el.hidden = false), hide: () => (el.hidden = true), toggle: () => (el.hidden = !el.hidden), visible: () => !el.hidden };
 }
 
-// Bar buttons: features register them with addBarButton(). A button with quick:true lives in the always-visible
-// "Tools" strip (a small floating window); every other button sits in a hidden store and is reached from a menu.
-let storeEl = null, quickWin = null;
+// GeezVTT's toolbars: small floating windows of square icon buttons. Features register a button with addBarButton();
+// an id listed in ICONS sits on the VTT toolbar (in this order), any other button stays off screen.
+export const svg = (d) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">${d}</svg>`;
+const ICONS = {
+  select: '<path d="m5 3 14 9-7 1-3 7Z"/>',
+  ruler: '<path d="m3 16 13-13 5 5L8 21Zm10-10 3 3m-6 0 2 2m-5 1 3 3"/>',
+  ping: '<circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2"/><path d="M12 1v4m0 14v4M1 12h4m14 0h4"/>',
+  dice: '<rect x="3" y="3" width="18" height="18" rx="3"/><path stroke-linecap="round" stroke-width="3" d="M8 8h0m8 0h0m-4 4h0m-4 4h0m8 0h0"/>',
+  token: '<path d="M12 3a4 4 0 1 1 0 8 4 4 0 0 1 0-8ZM4 21v-3a8 8 0 0 1 16 0v3Z"/>',
+  me: '<path d="M12 3a4 4 0 1 1 0 8 4 4 0 0 1 0-8ZM4 21v-3a8 8 0 0 1 16 0v3Z"/>',
+  top: '<path d="m12 3 9 5-9 5-9-5Zm-9 10 9 5 9-5"/>',
+  fit: '<path d="M4 9V4h5m6 0h5v5m0 6v5h-5m-6 0H4v-5"/>',
+  grid: '<path d="M3 3h18v18H3ZM3 9h18M3 15h18M9 3v18M15 3v18"/>',
+  time: '<circle cx="12" cy="12" r="5"/><path d="M12 1v3m0 16v3M1 12h3m16 0h3M4 4l2 2m12 12 2 2m0-16-2 2M6 18l-2 2"/>',
+  weather: '<path d="M7 18h11a4 4 0 0 0 0-8 6 6 0 0 0-11-1 4.5 4.5 0 0 0 0 9Z"/>',
+};
+const bars = {};
+export function toolbar(id, title, x) {
+  if (bars[id]) return bars[id];
+  const w = bars[id] = floatWindow({ id: "bar-" + id, title, x, y: innerHeight - 190, closable: false });
+  w.body.classList.add("toolbar");
+  const min = Object.assign(document.createElement("button"), { type: "button", className: "fwin-x", textContent: "−", title: `Minimize ${title}` });
+  min.setAttribute("aria-label", min.title); min.addEventListener("click", () => (w.body.hidden = !w.body.hidden));
+  w.el.querySelector(".fwin-bar").append(min);
+  return w;
+}
+let storeEl = null;
 const barStore = () => { if (!storeEl) { storeEl = document.createElement("div"); storeEl.id = "barstore"; storeEl.hidden = true; document.body.append(storeEl); } return storeEl; };
-// The Tools strip floats as a window; its x docks the same buttons (icons only) at the top right of the menu bar, and the
-// small float button there brings the window back. The choice is remembered.
-let dockEl = null, docked = (() => { try { return localStorage.getItem("vtt-tools-docked") === "1"; } catch { return false; } })();
-function quickBar() {
-  if (!quickWin) {
-    quickWin = floatWindow({ id: "quick", title: "Tools", x: 14, y: 40, closable: true }); quickWin.body.className += " quickbar";
-    quickWin.el.addEventListener("fwin-close", () => setDocked(true));
-    if (docked) quickWin.hide();
-  }
-  return quickWin;
-}
-const quickHost = () => (docked ? toolsDock() : quickBar().body);
-function toolsDock() {
-  if (dockEl) return dockEl;
-  dockEl = document.createElement("div"); dockEl.id = "toolsdock";
-  const role = document.getElementById("role"); (role?.parentNode || document.querySelector("header") || document.body).insertBefore(dockEl, role || null);
-  return dockEl;
-}
-function setDocked(on) {
-  docked = on; try { localStorage.setItem("vtt-tools-docked", on ? "1" : "0"); } catch { /* private mode */ }
-  const win = quickBar(), from = on ? win.body : toolsDock(), to = on ? toolsDock() : win.body;
-  for (const b of [...from.querySelectorAll(".barbtn")]) to.append(b);
-  dockEl?.querySelector(".undock")?.remove();
-  if (on) { const u = document.createElement("button"); u.type = "button"; u.className = "undock"; u.textContent = "⇲"; u.title = "Float the tools"; u.addEventListener("click", () => setDocked(false)); dockEl.prepend(u); win.hide(); }
-  else { win.show(); dockEl.hidden = true; }
-  if (on) dockEl.hidden = false;
-}
-// addBarButton({ id, icon, label, title, onClick, gmOnly, toggle, quick }) -> button element. onClick gets (event, button).
-export function addBarButton({ id, icon = "", label, title = label, onClick, gmOnly = false, toggle = false, quick = false }) {
-  const b = document.createElement("button"); b.id = "bar-" + id; b.className = "barbtn"; b.title = title; b.type = "button";
-  b.innerHTML = `<span class="ico">${icon}</span><span class="lbl"></span>`; b.querySelector(".lbl").textContent = label;
-  if (gmOnly && !new URLSearchParams(location.search).has("gm")) b.hidden = true;
+// addBarButton({ id, label, title, onClick, gmOnly, toggle }) -> button element. onClick gets (event, button).
+export function addBarButton({ id, label, title = label, onClick, gmOnly = false, toggle = false }) {
+  const b = document.createElement("button"); b.id = "bar-" + id; b.className = "barbtn"; b.title = title; b.type = "button"; b.setAttribute("aria-label", label);
+  b.innerHTML = `${ICONS[id] ? svg(ICONS[id]) : ""}<span class="lbl"></span>`; b.querySelector(".lbl").textContent = label;
+  if (gmOnly && !S.isGM) b.hidden = true;
   b.addEventListener("click", (e) => { e.stopPropagation(); if (toggle) b.classList.toggle("on"); onClick?.(e, b); });
-  (quick ? quickHost() : (storeEl || barStore())).append(b); if (quick && docked && !dockEl.querySelector(".undock")) setDocked(true); return b;
+  if (ICONS[id]) { b.style.order = Object.keys(ICONS).indexOf(id); toolbar("vtt", "VTT Controls", 16).body.append(b); } else barStore().append(b);
+  return b;
 }
-// Put the Tools strip buttons in a fixed order (features register them in whatever order they load).
-export function orderQuickBar(ids) { const body = quickHost(); for (const id of ids) { const b = document.getElementById("bar-" + id); if (b && body.contains(b)) body.append(b); } }
 
 // menuWindow(id, title, getItems) -> click handler for a bar button: toggles a floating window of buttons instead of a dropdown.
 // getItems() returns [[label, fn], ...] (null fn = heading); fn gets the clicked button so it can anchor a sub-menu.
@@ -138,40 +143,7 @@ export function dropMenu(anchor, items) {
   }
   document.body.append(m); const r = anchor.getBoundingClientRect();
   m.style.left = Math.min(r.left, innerWidth - m.offsetWidth - 8) + "px"; m.style.top = Math.min(r.bottom + 4, innerHeight - m.offsetHeight - 8) + "px";
-  setTimeout(() => document.addEventListener("pointerdown", function once(e) { if (m.contains(e.target)) return; m.remove(); if (openMenu === m) openMenu = null; document.removeEventListener("pointerdown", once); }), 0);
+  setTimeout(() => document.addEventListener("pointerdown", function once(e) { if (m.contains(e.target)) return; m.remove(); if (openMenu === m) openMenu = null; document.removeEventListener("pointerdown", once, true); }, true), 0);
   return m;
 }
 export { $ };
-
-// ---- menu bar behaviour: one menu open at a time; once one is open, hovering another item switches to it ----
-{
-  const bar = document.getElementById("menubar");
-  const DROPS = ["file-btn", "table-btn", "atmo-btn", "audio-btn", "view-btn"], MENUS = ["add", ...DROPS];
-  const isOpen = (id) => id === "add" ? !document.getElementById("addmenu")?.hidden : openMenu?.dataset.anchor === id;
-  const closeMenus = (except) => {
-    if (except !== "add") { const m = document.getElementById("addmenu"); if (m) m.hidden = true; const s = document.getElementById("addsub"); if (s) s.hidden = true; }
-    if (openMenu && openMenu.dataset.anchor !== except) { openMenu.remove(); openMenu = null; }
-    for (const id of DROPS) if (id !== except) document.getElementById(id)?.classList.remove("on");
-  };
-  bar?.addEventListener("click", (e) => { const b = e.target.closest("button"); if (b && MENUS.includes(b.id)) closeMenus(b.id); }, true);
-  bar?.addEventListener("mouseover", (e) => {
-    const b = e.target.closest("button"); if (!b || !MENUS.includes(b.id) || b.hidden || isOpen(b.id)) return;
-    if (MENUS.some(isOpen)) b.click();
-  });
-  // File / Table / Atmosphere: GM menus whose items press the (hidden) bar buttons registered by each feature.
-  const gm = new URLSearchParams(location.search).has("gm");
-  const press = (label, id, check) => { const b = document.getElementById("bar-" + id); return b && !b.hidden ? [(check ? (b.classList.contains("on") ? "✓ " : "   ") : "") + label, () => b.click()] : null; };
-  const toggleWin = (label, winId) => { const w = document.getElementById(winId); return w ? [label, () => { w.hidden = !w.hidden; }] : null; };
-  const LAYOUT = {
-    "file-btn": () => [press("Scene…", "scene"), press("Import / Export…", "dd2vtt"), ["Undo", () => import("./undo.js").then((m) => m.undo())], ["Redo", () => import("./undo.js").then((m) => m.redo())]],
-    "table-btn": () => [toggleWin("Initiative", "win-init"), press("Roll Call", "rollcall"), press("Handouts", "handouts"), press("Images", "image")],
-    "atmo-btn": () => [press("Time", "time", true), press("Weather", "weather", true)],
-  };
-  for (const [id, items] of Object.entries(LAYOUT)) {
-    const btn = document.getElementById(id); if (!btn) continue; btn.hidden = !gm;
-    btn.addEventListener("click", (e) => {
-      e.stopPropagation(); btn.classList.add("on"); dropMenu(btn, items().filter(Boolean));
-      setTimeout(() => document.addEventListener("pointerdown", () => btn.classList.remove("on"), { once: true }), 0);
-    });
-  }
-}

@@ -98,13 +98,11 @@ let current = null, callWin, setupWin, ready = false, seen = new Set(), opt = { 
 const pageLoadedAt = Date.now();
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
-const STYLE = `#win-rollcall-call .fwin-body,#win-rollcall-setup .fwin-body{color:var(--paper);font:15px Georgia,serif;min-width:270px;max-width:340px}
-.rc-h{font:bold 19px Georgia,serif;color:var(--brass-lt)}.rc-sub{font-size:12px;opacity:.8;margin-bottom:6px}
-.rc-row{display:flex;align-items:center;gap:8px;border-bottom:1px solid #b98f4566;padding:4px 0}.rc-row.wait{opacity:.55}.rc-row .nm{flex:1}.rc-row b{font-size:17px}.rc-ok{color:#7ddc8c}.rc-bad{color:#ff8a8a}.rc-nat{font-size:11px}
-.rc-why{line-height:1.45;font-size:12.5px;opacity:1}.rc-box{margin-top:8px;padding-top:7px;border-top:1px solid var(--brass)}.rc-chips{display:flex;flex-wrap:wrap;gap:4px;margin:5px 0}
-.rc-chips button,.rc-act button,.rc-roll{padding:3px 9px;border:1px solid var(--brass);border-radius:11px;background:var(--leather-dk);color:var(--paper);font:13px Georgia,serif;cursor:pointer}
-.rc-chips button.on{background:var(--brass);color:var(--ink)}.rc-roll{display:block;width:100%;margin-top:7px;padding:7px;border-radius:5px;font:bold 20px Georgia,serif}.rc-act{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
-#win-rollcall-setup input,#win-rollcall-setup select{background:var(--paper);color:var(--ink);border:1px solid var(--brass);border-radius:3px;font:14px Georgia,serif;padding:2px 4px}
+const STYLE = `#win-rollcall-call .fwin-body,#win-rollcall-setup .fwin-body{min-width:270px;max-width:340px}
+.rc-h{font-weight:bold;font-size:1rem;color:var(--accent)}.rc-sub{font-size:12px;opacity:.8;margin-bottom:6px}
+.rc-row{display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--line);padding:4px 0}.rc-row.wait{opacity:.55}.rc-row .nm{flex:1}.rc-row b{font-size:17px}.rc-ok{color:#7ddc8c}.rc-bad{color:#ff8a8a}.rc-nat{font-size:11px}
+.rc-why{line-height:1.45;font-size:12.5px;opacity:1}.rc-box{margin-top:8px;padding-top:7px;border-top:1px solid var(--line)}.rc-chips{display:flex;flex-wrap:wrap;gap:4px;margin:5px 0}
+.rc-roll{display:block;width:100%;margin-top:7px;padding:7px;font-weight:bold;font-size:1rem}.rc-act{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
 .rc-fld{display:flex;align-items:center;gap:8px;margin:6px 0}.rc-targets{max-height:200px;overflow:auto;margin:4px 0}.rc-targets label{display:flex;align-items:center;gap:6px;padding:2px 0}`;
 
 // ---- the call window (everyone) -----------------------------------------------------------

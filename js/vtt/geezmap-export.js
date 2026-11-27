@@ -76,6 +76,7 @@ export function exportGeezMap(state, opts = {}) {
   for (const layer of [map.floors, map.walls, map.roofs, map.props, map.labels, objects]) for (const [, o] of entries(layer)) keys.add(lvOf(o));
   const floorIds = [...keys].sort((a, b) => a - b);
   const cols = Math.max(1, num(map.size?.cols, 20)), rows = Math.max(1, num(map.size?.rows, 14));
+  const origin = { x: num(map.size?.x), y: num(map.size?.y) };
   const atmo = state.atmosphere || {};
   const light = map.light === "dark" ? "dark" : "lit";
   const floorNames = {};
@@ -93,9 +94,9 @@ export function exportGeezMap(state, opts = {}) {
   const lights = entries(base.lights).map(([, l]) => ({ position: pt(l.x, l.y), range: l.range, ...(l.intensity != null ? { intensity: l.intensity } : { intensity: 1 }), color: hex6(l.color) + "ff", shadows: true }));
   return {
     format: "geezmap", version: 1, name, generator: "GeezMapper",
-    meta: { name, size: { x: cols, y: rows }, origin: { x: 0, y: 0 }, floors: floorIds, floorNames, light, time: timeName(atmo.time), weather: { kind: weatherKind(atmo.weather), wind: 0 } },
+    meta: { name, size: { x: cols, y: rows }, origin, floors: floorIds, floorNames, light, time: timeName(atmo.time), weather: { kind: weatherKind(atmo.weather), wind: 0 } },
     floors,
-    resolution: { map_origin: { x: 0, y: 0 }, map_size: { x: cols, y: rows }, pixels_per_grid: 70 },
+    resolution: { map_origin: { ...origin }, map_size: { x: cols, y: rows }, pixels_per_grid: 70 },
     line_of_sight, objects_line_of_sight: [], portals, lights,
     environment: { baked_lighting: false, ambient_light: "ffffffff" },
     image: opts.imageBase64 || "",

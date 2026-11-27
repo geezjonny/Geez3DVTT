@@ -14,6 +14,7 @@ else $("#role").textContent = "WASD / arrows to move";
 const pTools = S.isGM ? floatWindow({ id: "puzzle-tools", title: "Puzzle", x: 20, y: 120, hidden: true }) : null;
 const pLogic = S.isGM ? floatWindow({ id: "puzzle-logic", title: "Logic", x: 220, y: 120, hidden: true }) : null;
 if (S.isGM) { pTools.body.classList.add("puzzletools"); pLogic.body.classList.add("puzzlelogic"); const kids = [...$("#panel").children]; pTools.body.append(...kids.slice(0, 2)); pLogic.body.append(...kids.slice(2)); }
+pTools?.el.addEventListener("fwin-close", () => { if (S.puzzleMode) { $("#mode").click(); document.querySelector('#win-bar-build [data-kind="traps"]')?.classList.remove("on"); } });
 const on = (type, fn) => S.isGM && [pTools.body, pLogic.body].forEach((b) => b.addEventListener(type, fn));
 $("#mode")?.addEventListener("click", () => {
   S.puzzleMode = !S.puzzleMode; $("#mode").classList.toggle("on", S.puzzleMode);

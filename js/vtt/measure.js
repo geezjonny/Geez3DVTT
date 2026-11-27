@@ -11,11 +11,11 @@ function style() {
   const s = document.createElement("style"); s.id = "measure-style";
   s.textContent = `
     #map.measuring { cursor: crosshair; }
-    #measure .measure-line { stroke: var(--brass-lt); stroke-width: 2; stroke-dasharray: 7 5; }
-    #measure .measure-dot { fill: var(--brass-lt); stroke: var(--ink); stroke-width: 1; }
-    #measure .measure-label { fill: var(--paper); stroke: var(--leather-dk); stroke-width: 5px; paint-order: stroke; font: 16px Georgia, serif; text-anchor: middle; dominant-baseline: middle; }
-    #measure .ping-ring { fill: none; stroke: var(--brass-lt); stroke-width: 3; opacity: 0; transform-box: fill-box; transform-origin: center; animation: measure-ping 1.5s ease-out forwards; }
-    #measure .ping-dot { fill: #fff; stroke: var(--brass); stroke-width: 2; animation: measure-ping-dot 1.5s ease-out forwards; }
+    #measure .measure-line { stroke: var(--accent); stroke-width: 2; stroke-dasharray: 7 5; }
+    #measure .measure-dot { fill: var(--accent); stroke: var(--ink); stroke-width: 1; }
+    #measure .measure-label { fill: var(--paper); stroke: var(--panel); stroke-width: 5px; paint-order: stroke; font: 16px system-ui, sans-serif; text-anchor: middle; dominant-baseline: middle; }
+    #measure .ping-ring { fill: none; stroke: var(--accent); stroke-width: 3; opacity: 0; transform-box: fill-box; transform-origin: center; animation: measure-ping 1.5s ease-out forwards; }
+    #measure .ping-dot { fill: #fff; stroke: var(--line); stroke-width: 2; animation: measure-ping-dot 1.5s ease-out forwards; }
     @keyframes measure-ping { 0% { opacity: .95; transform: scale(.15); } 65% { opacity: .75; } 100% { opacity: 0; transform: scale(1); } }
     @keyframes measure-ping-dot { 0%, 65% { opacity: 1; } 100% { opacity: 0; } }
   `;
@@ -114,7 +114,7 @@ export function initMeasure() {
   }, true);
   document.addEventListener("pointermove", (e) => { if (!s3 || !in3d(e)) return; handled(e); const p = p3(e, e.shiftKey); if (p) { S.v3d.ruler(s3, p); label3(s3, p); } }, true);
   document.addEventListener("pointerup", (e) => { if (!s3) return; handled(e); s3 = null; setTimeout(() => { if (!s3) { S.v3d?.ruler(null); tip3.hidden = true; } }, 2000); }, true);
-  const tip3 = Object.assign(document.createElement("div"), { hidden: true }); tip3.style.cssText = "position:fixed;z-index:8;pointer-events:none;background:var(--leather-dk);color:var(--paper);border:1px solid var(--brass);border-radius:6px;padding:.1rem .5rem;font:16px Georgia,serif;transform:translate(-50%,-140%)"; document.body.append(tip3);
+  const tip3 = Object.assign(document.createElement("div"), { hidden: true }); tip3.id = "measure-tip"; tip3.style.cssText = "position:fixed;z-index:8;pointer-events:none;padding:.1rem .5rem;transform:translate(-50%,-140%)"; document.body.append(tip3);
   const label3 = (a, b) => { tip3.hidden = false; tip3.textContent = `${Math.round(Math.max(Math.abs(b.x - a.x), Math.abs(b.y - a.y)) / 40 * 5)} ft`; const c = S.v3d.screenAt((a.x + b.x) / 2, (a.y + b.y) / 2); tip3.style.left = c.x + "px"; tip3.style.top = c.y + "px"; };
   const sync = () => S.v3d?.setControls(!mode); document.addEventListener("view3dchange", sync);
   const setMode0 = setMode; setMode = (n) => { setMode0(n); sync(); };

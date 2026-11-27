@@ -1,6 +1,5 @@
-// Player-side persistence and GM controls for explored memory. Rules are never run here.
+// Player-side persistence of explored memory. Rules are never run here.
 import { put as save, watch } from "../store.js";
-import { addBarButton, dropMenu } from "./ui.js";
 import { S, mapSize } from "./state.js";
 import { cellsForHoles, decodeCells, encodeCells, mergeCells } from "./explored.js";
 
@@ -22,10 +21,7 @@ const schedule = () => { clearTimeout(timer); timer = setTimeout(flush, 700); };
 export function initExplored() {
   S.currentVisible = new Set(); current();
   if (S.isGM) {
-    const button = addBarButton({ quick: true, id: "explored", icon: "◌", label: "Explore", title: "Toggle explored memory", gmOnly: true, toggle: true, onClick: (e, b) => save("map/exploredEnabled", b.classList.contains("on")) });
-    const reset = addBarButton({ quick: true, id: "explored-reset", icon: "↺", label: "Reset explored", title: "Reset explored memory for everyone or one character", gmOnly: true, onClick: (e, b) => dropMenu(b, [["Reset everyone", () => save("explored", null)], ...Object.entries(S.tokens).filter(([, t]) => t.pc).map(([, t]) => ["Reset: " + (t.label || t.pc), () => save(`explored/${t.pc}`, null)])]) });
-    button.classList.toggle("on", S.map.exploredEnabled !== false);
-    watch("map/exploredEnabled", (v) => { S.map.exploredEnabled = v !== false; button.classList.toggle("on", S.map.exploredEnabled); redraw(); });
+    watch("map/exploredEnabled", (v) => { S.map.exploredEnabled = v !== false; redraw(); });
     return;
   }
   const start = () => {
@@ -42,7 +38,8 @@ export function initExplored() {
 
 export function visibilityFromHoles(holes) {
   // Hook: replace this adapter with vision.js polygon coverage when live sight is wired to it.
-  return cellsForHoles(holes, mapSize().cols, mapSize().rows);
+  const { cols, rows, x, y } = mapSize();
+  return cellsForHoles(holes, cols, rows, x, y);
 }
 
 export function recordVisible(holes) {

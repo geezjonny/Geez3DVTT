@@ -1,6 +1,8 @@
 // Universal VTT (.dd2vtt) import/export. The parser is deliberately independent
 // of the browser, Firebase, and the rest of the VTT so it can be tested in Node.
 
+import { MAX_CELLS } from "./bounds.js";
+
 const CELL = 40;
 const MAX_WALLS = 3000;
 const finite = (n) => typeof n === "number" && Number.isFinite(n);
@@ -142,8 +144,11 @@ export async function applyDD2VTT(data, mode = "merge") {
       await store.put(`scenes/${key}`, { name: `Before import ${stamp}`, ts: Date.now(), data: { map: map || {}, objects: objects || {}, tokens: tokens || {}, groups: groups || {}, mapimg: mapimg || null } });
     }
     await Promise.all([store.put("map", null), store.put("objects", null), store.put("tokens", null), store.put("groups", null)]);
-    changes["map/size"] = { cols: Math.max(10, Math.min(100, data.cols)), rows: Math.max(10, Math.min(100, data.rows)) };
-  } else changes["map/size"] = { cols: Math.max(cur.cols, Math.min(100, data.cols)), rows: Math.max(cur.rows, Math.min(100, data.rows)) };
+    changes["map/size"] = { cols: Math.max(10, Math.min(MAX_CELLS, data.cols)), rows: Math.max(10, Math.min(MAX_CELLS, data.rows)), x: data.x || 0, y: data.y || 0 };
+  } else {
+    const x = Math.min(cur.x, data.x || 0), y = Math.min(cur.y, data.y || 0);
+    changes["map/size"] = { x, y, cols: Math.max(cur.x + cur.cols, (data.x || 0) + Math.min(MAX_CELLS, data.cols)) - x, rows: Math.max(cur.y + cur.rows, (data.y || 0) + Math.min(MAX_CELLS, data.rows)) - y };
+  }
   let n = 0;
   for (const f of data.floors || []) changes[`map/floors/${id("f", n++)}`] = { lv: 0, ...f, ...onFloor };
   for (const w of data.walls) changes[`map/walls/${id("w", n++)}`] = { lv: 0, ...w, ...onFloor };
@@ -157,7 +162,7 @@ export async function applyDD2VTT(data, mode = "merge") {
   for (const [fid, f] of Object.entries(data.fog || {})) changes[`map/fog/${id("g", n++)}`] = { open: false, ...f };
   if (data.floorNames) changes["map/levelNames"] = data.floorNames;
   if (data.floorKeys?.length) changes["map/level"] = Number(data.floorKeys[0]) || 0;
-  if (data.light) { changes["map/light"] = data.light; if (data.light === "dark") for (let y = 0; y < data.rows; y++) changes[`map/fog/${id("g", n++)}`] = { x: 0, y: y * 40, w: data.cols * 40, h: 40, open: false, lv: L ?? 0 }; }
+  if (data.light) { changes["map/light"] = data.light; if (data.light === "dark") for (let y = 0; y < data.rows; y++) changes[`map/fog/${id("g", n++)}`] = { x: (data.x || 0) * 40, y: ((data.y || 0) + y) * 40, w: data.cols * 40, h: 40, open: false, lv: L ?? 0 }; }
   changes.seeded = true;
   await store.patch(JSON.parse(JSON.stringify(changes))); // Firebase rejects undefined values (e.g. door mat)
   if (data.atmosphere?.time != null) await store.put("atmosphere", { time: data.atmosphere.time, weather: data.atmosphere.weather, color: "#4d86b8" });
@@ -225,18 +230,11 @@ export async function exportGeezMapFile() {
   toast(`Exported ${a.download}`);
 }
 
-export function initDD2VTT() {
-  if (!new URLSearchParams(location.search).has("gm")) return;
-  Promise.all([import("./ui.js"), import("./state.js")]).then(([{ addBarButton, menuWindow }, { S }]) => {
-    addBarButton({ id: "dd2vtt", icon: "🗺", label: "Import", gmOnly: true, onClick: menuWindow("import", "Import / Export", () => [
-      ["Battle maps (battlemap/)…", async (b) => { const { libraryMaps } = await import("./mapimg.js"), { dropMenu } = await import("./ui.js"); const list = await libraryMaps(); dropMenu(b, list.length ? list.map((m) => [`${m.name} (${(m.bytes / 1048576).toFixed(1)} MB)`, () => importWithChoice(m.name, async () => parseDD2VTT(await (await fetch(geezMapUrl(m.file))).json()), "battlemap/" + m.file)]) : [["No battlemap/index.json", null]]); }],
-      ["Clean up wall overlaps", async () => { const { cleanOverlaps } = await import("./tools.js"), r = cleanOverlaps(); toast(`Walls: ${r.before} → ${r.after}`); }],
-      ["Import .dd2vtt file…", () => { const input = document.createElement("input"); input.type = "file"; input.accept = ".dd2vtt,.json,.uvtt"; input.addEventListener("change", () => { const f = input.files[0]; if (f) importWithChoice(f.name, async () => parseDD2VTT(JSON.parse(await f.text()))); }); input.click(); }],
-      ["Import GeezSheets map (.geezmap.json)…", (b) => { const input = document.createElement("input"); input.type = "file"; input.accept = ".json"; input.addEventListener("change", () => { const f = input.files[0]; if (f) importGeezChoice(f, b); }); input.click(); }],
-      ["From GeezSheets places…", async (b) => { try { const places = await listGeezPlaces(); const { dropMenu } = await import("./ui.js"); dropMenu(b, [["GeezSheets battle maps (read-only)", null], ...places.map((p) => [p.name, () => importWithChoice(p.name, async () => { const r = await fetch(geezMapUrl(p.file)); if (!r.ok) throw new Error(`Could not load ${p.file}`); return parseDD2VTT(await r.json()); })])]); } catch (e) { toast(e.message); } }],
-      ["From GeezSheets maps…", async (b) => { try { const names = await listGeezMaps(); const { dropMenu } = await import("./ui.js"); dropMenu(b, [["GeezSheets raw maps (read-only)", null], ...names.map((n) => [n, async () => { const { readAt } = await import("../store.js"); importWithChoice(n, async () => { const m = await readAt(`maps/${n}`); if (!m?.geometry) throw new Error(`No geometry at maps/${n}`); return parseDD2VTT(geezGeometryToDD2VTT(m.geometry)); }); }])]); } catch (e) { toast(e.message); } }],
-      ["Export .geezmap.json (also a dd2vtt)", () => exportGeezMapFile().catch((e) => toast(e.message))],
-      ["Export .dd2vtt", async () => { const blob = await exportDD2VTT(); const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `${(S?.sceneName || S?.map?.name || "map").replace(/[\\/:*?"<>|]+/g, "_")}.dd2vtt`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000); }],
-    ]) });
-  });
+// The Scene Controls' map buttons (scenes.js).
+const pickFile = (accept, use) => { const input = Object.assign(document.createElement("input"), { type: "file", accept }); input.addEventListener("change", () => { const f = input.files[0]; if (f) use(f); }); input.click(); };
+export async function loadLibraryMap(button) {
+  const { libraryMaps } = await import("./mapimg.js"), { dropMenu } = await import("./ui.js"), list = await libraryMaps();
+  dropMenu(button, list.length ? list.map((m) => [`${m.name} (${(m.bytes / 1048576).toFixed(1)} MB)`, () => importWithChoice(m.name, async () => parseDD2VTT(await (await fetch(geezMapUrl(m.file))).json()), "battlemap/" + m.file)]) : [["No battlemap/index.json", null]]);
 }
+export const importMapFile = () => pickFile(".dd2vtt,.json,.uvtt", (f) => importWithChoice(f.name, async () => parseDD2VTT(JSON.parse(await f.text()))));
+export const importSceneFile = (button) => pickFile(".json", (f) => importGeezChoice(f, button));

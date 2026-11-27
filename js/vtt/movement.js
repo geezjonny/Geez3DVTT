@@ -8,12 +8,12 @@ export function pushOut(o, r, segs) {   // the circle push-out from GeezVTT's st
   }
 }
 // Move in short steps so nothing is ever jumped through.
-export function moveCircle(o, dx, dy, r, segs, width, height) {
+export function moveCircle(o, dx, dy, r, segs, right, bottom, left = 0, top = 0) {
   const steps = Math.max(1, Math.ceil(Math.hypot(dx, dy) / 3));
   for (let i = 0; i < steps; i++) {
     o.x += dx / steps; o.y += dy / steps;
     pushOut(o, r, segs);
-    o.x = Math.max(r, Math.min(width - r, o.x)); o.y = Math.max(r, Math.min(height - r, o.y));
+    o.x = Math.max(left + r, Math.min(right - r, o.x)); o.y = Math.max(top + r, Math.min(bottom - r, o.y));
   }
   return o;
 }

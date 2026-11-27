@@ -34,8 +34,8 @@ export function solidSegments(level = null) {
 
 // Is a one-cell step between two cell-centre points blocked (wall, closed door, window, or off the map)?
 export function stepBlocked(from, to) {
-  const { cols, rows } = mapSize();
-  if (to.x < 20 || to.y < 20 || to.x > cols * 40 - 20 || to.y > rows * 40 - 20) return true;
+  const { cols, rows, x, y } = mapSize();
+  if (to.x < x * 40 + 20 || to.y < y * 40 + 20 || to.x > (x + cols) * 40 - 20 || to.y > (y + rows) * 40 - 20) return true;
   const seg = [from.x, from.y, to.x, to.y];
   return solidSegments().some((s) => touches(seg, s));
 }

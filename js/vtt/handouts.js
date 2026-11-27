@@ -13,10 +13,10 @@ function installStyle() {
   style.textContent = `
     #win-handout-post .handout-form { display:grid; gap:.5rem; min-width:18rem; }
     #win-handout-post label { display:grid; gap:.2rem; }
-    #win-handout-post input { box-sizing:border-box; width:100%; background:var(--leather-dk); color:var(--paper); border:1px solid var(--brass); border-radius:4px; padding:.35rem; font:inherit; }
+    #win-handout-post input { box-sizing:border-box; width:100%; }
     #win-handout-post .handout-actions { display:flex; justify-content:flex-end; gap:.4rem; }
-    .handout-image { display:block; max-width:70vw; max-height:70vh; width:auto; height:auto; object-fit:contain; background:var(--leather-dk); }
-    #win-handout-post [data-status] { color:var(--brass-lt); font-size:12px; min-height:1em; }
+    .handout-image { display:block; max-width:70vw; max-height:70vh; width:auto; height:auto; object-fit:contain; background:var(--panel); }
+    #win-handout-post [data-status] { color:var(--accent); font-size:12px; min-height:1em; }
   `;
   document.head.append(style);
 }

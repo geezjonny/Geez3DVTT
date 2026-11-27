@@ -31,18 +31,16 @@ import { initScenes } from "./scenes.js";
 import { initImages, imageAt, imageFields, removeImage } from "./images.js";
 import { initMeasure } from "./measure.js";
 import { initDice } from "./dice.js";
-import { initAudio } from "./audio.js";
 import { initHandouts } from "./handouts.js";
 import { initRollCall } from "./rollcall.js";
 import { initAtmosphere } from "./atmosphere.js";
 import { openTokenPicker } from "./tokenpics.js";
 import { openInventory } from "./inventory.js";
 import { openEquipment } from "./equipment.js";
-import { initDD2VTT } from "./dd2vtt.js";
 import { initMapImage } from "./mapimg.js";
 import { initRefImage } from "./refimage.js";
 import { initReplace, openReplace } from "./replace.js";
-import { addBarButton, dropMenu, orderQuickBar, floatWindow } from "./ui.js";
+import { addBarButton, dropMenu, toolbar, floatWindow } from "./ui.js";
 import { drawObjects, drawTokens, drawTray, drawMap, drawWalls, isPcToken, doorsList, wallPieces } from "./draw.js";
 import { initTools, snapFor, toolDown, toolMove, toolUp, roofAt, fogAt, wallAt, floorAt, settingsFor } from "./tools.js";
 import { renderPanel, openLogic } from "./panel.js";
@@ -51,9 +49,7 @@ import "./talk.js";
 import { initJoin } from "./join.js";
 import { initChatDock } from "./chatdock.js";
 import { initTable } from "./table.js";
-import { initAnnotations } from "./annotations.js";
 import { EFFECT_PRESETS, effectsOf, effectRemaining, makeEffect, damageAdjustment } from "./effects.js";
-import { initJournal } from "./journal.js";
 import { initExplored } from "./explored-vtt.js";
 import { visibleToPlayer } from "./visibility.js";
 
@@ -83,12 +79,12 @@ function followOwnFloor() {   // a player always looks at the floor their token 
 watch("map/level", (v) => { if (!followOwnFloor()) showLevel(Number(v) || 0); });
 addEventListener("vtt-me-changed", () => followOwnFloor());
 watch("map/levelNames", (v) => { S.map.levelNames = v || {}; });
-initTools(); initView(); initInitiative(); initScenes(); initImages(); initRefImage(); initMapImage(); initReplace(); initMeasure(); initDice(); initDD2VTT(); initAudio(); initHandouts(); initRollCall(); initAtmosphere(); initAttack(); initCmd(); initTable(); initAnnotations(); initExplored();
+initTools(); initView(); initInitiative(); initScenes(); initImages(); initRefImage(); initMapImage(); initReplace(); initMeasure(); initDice(); initHandouts(); initRollCall(); initAtmosphere(); initAttack(); initCmd(); initTable(); initExplored();
 S.exploredRedraw = () => { drawMap(); drawTokens(); };
-{   // on-screen floor switcher (2D and 3D): players see the floor name, the GM gets up/down
+{   // floor switcher on the VTT toolbar: players see the floor name, the GM gets up/down
   const box = document.createElement("div"); box.id = "floorsw";
   box.innerHTML = (S.isGM ? '<button type="button" data-d="1" title="Floor up">▲</button>' : "") + '<span class="fl"></span>' + (S.isGM ? '<button type="button" data-d="-1" title="Floor down">▼</button>' : "");
-  document.body.append(box);
+  toolbar("vtt", "VTT Controls", 16).body.append(box);
   const label = () => { const lv = S.level ?? S.map.level ?? 0; box.querySelector(".fl").textContent = S.map.levelNames?.[lv] || (lv === 0 ? "Ground" : `Floor ${lv}`); };
   box.addEventListener("click", (e) => { const d = Number(e.target.closest("button")?.dataset.d); if (!d) return; const lv = (S.level ?? 0) + d; S.level = lv; rawPut("map/level", lv); label(); document.dispatchEvent(new Event("levelchange")); });
   box.addEventListener("pointerdown", (e) => e.stopPropagation());
@@ -122,7 +118,6 @@ async function trackPcs() {
 }
 function liveMenu(pcId) {
   const live = S.pcLive[pcId];
-  if (live?.hp_max) for (const [wid, w] of Object.entries(tokWins)) if (!w.el.hidden && S.tokPc[wid] === pcId && w.body.firstChild?.children[1]) w.body.firstChild.children[1].textContent = `HP: ${live.hp_current ?? live.hp_max} / ${live.hp_max}${live.temp_hp ? ` (+${live.temp_hp} temp)` : ""}`;   // open PC windows follow the sheet
   const c = S.pcLive[pcId], tid = tokMenu?.dataset.tid;
   if (c?.hp_max && tid && S.tokPc[tid] === pcId) tokMenu.children[1].textContent = `HP: ${c.hp_current ?? c.hp_max} / ${c.hp_max}${c.temp_hp ? ` (+${c.temp_hp} temp)` : ""}`;
 }
@@ -156,8 +151,16 @@ function mapPoint(e) {
   return p.matrixTransform(map.getScreenCTM().inverse());
 }
 document.addEventListener("click", (e) => { if (e.target.closest("button, select, summary")) play("click"); });
+function pickSpot(p) {   // the cell a trigger rule is waiting for
+  const spot = cellOf(p), { zone, id } = S.pick; S.pick = null; map.classList.remove("picking");
+  if (zone === "when") S.draft.when.find((c) => c.id === id).at = spot;
+  else if (zone === "then") S.draft.then.find((c) => c.id === id).to = spot;
+  else if (zone === "prop") put(`objects/${id}/to`, spot);
+  renderPanel();
+}
+function toggleSelected(id) { S.selected.has(id) ? S.selected.delete(id) : S.selected.add(id); S.lastSel = id; drawObjects(); renderPanel(true); }
 map.addEventListener("pointerdown", (e) => {
-  if (!S.isGM && S.paused) return;
+  if (e.button !== 0 || (!S.isGM && S.paused)) return;   // only the left button draws, drags or uses; right-click is the menu
   const { objects, tokens } = S;
   const p = mapPoint(e), objEl = e.target.closest(".obj"), tokEl = e.target.closest(".token");
   if (!S.pick && toolDown(e, p)) return;   // GM map-building tools
@@ -170,11 +173,7 @@ map.addEventListener("pointerdown", (e) => {
     if (o?.kind === "switch") { play("click"); return put(`objects/${objEl.dataset.id}/state`, o.state === "on" ? "off" : "on"); }
     if (o?.kind === "dial") { play("click"); const s = statesOf(o); return put(`objects/${objEl.dataset.id}/state`, s[(s.indexOf(o.state) + 1) % s.length]); }
   } else {
-    if (S.pick) { const spot = cellOf(p), { zone, id } = S.pick; S.pick = null; map.classList.remove("picking");
-      if (zone === "when") S.draft.when.find((c) => c.id === id).at = spot;
-      else if (zone === "then") S.draft.then.find((c) => c.id === id).to = spot;
-      else if (zone === "prop") put(`objects/${id}/to`, spot);
-      return renderPanel(); }
+    if (S.pick) return pickSpot(p);
     if (objEl) { objDrag = { id: objEl.dataset.id, el: objEl, x0: p.x, y0: p.y, moved: false }; map.setPointerCapture(e.pointerId); return; }
   }
   if (tokEl && !S.isGM) return;   // only the GM drags tokens; players use the keyboard
@@ -196,12 +195,12 @@ map.addEventListener("pointermove", (e) => {
   d.setAttribute("transform", `translate(${d.dataset.x} ${d.dataset.y})`);
   S.v3d?.dragToken(d.dataset.id, c);
 });
-const release = () => {
-  if (toolUp()) return;
+const release = (e) => {
+  if (e.button > 0 || toolUp()) return;
   if (objDrag) {
     const { id, moved, snap } = objDrag; objDrag = null;
     if (moved && snap) put(`objects/${id}`, { ...S.objects[id], x: snap.x, y: snap.y, sx: snap.x, sy: snap.y, ...(snap.dir ? { dir: snap.dir } : {}) });
-    else { S.selected.has(id) ? S.selected.delete(id) : S.selected.add(id); S.lastSel = id; drawObjects(); renderPanel(true); }
+    else toggleSelected(id);
     return;
   }
   if (!S.dragging) return;
@@ -209,10 +208,11 @@ const release = () => {
   if (x != null) patch({ [`tokens/${id}/x`]: +x, [`tokens/${id}/y`]: +y }); else drawTokens();
 };
 // GM right-click: reveal or hide an object (a passed perception roll reveals a trap).
-// Right-click a token (anyone): read-only name + HP, and a "View sheet" link for PCs (tokens with no HP / NPC).
+// Right-click a token (anyone): a menu with its name, HP and actions. A PC's sheet opens only from "View sheet".
 let tokMenu = null;
 const closeTokMenu = () => { tokMenu?.remove(); tokMenu = null; };
-document.addEventListener("pointerdown", (e) => { if (tokMenu && !tokMenu.contains(e.target)) closeTokMenu(); });
+document.addEventListener("pointerdown", (e) => { if (tokMenu && !tokMenu.contains(e.target)) closeTokMenu(); }, true);   // capture: map panning stops the event before it bubbles
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeTokMenu(); });
 const SHEET_URL = "https://geezjonny.github.io/GeezSheets/companion.html";   // GeezSheets (sheet.html?char=<pc id>); change if hosted elsewhere
 let pcs = null;   // player characters from the main app (read only): [{ id, name }]
 async function loadPcs() {
@@ -254,47 +254,23 @@ function openSheetWindow(pc) {
   let w = sheetWins[pc.id];
   if (!w) {
     w = sheetWins[pc.id] = floatWindow({ id: "sheet-" + pc.id, title: pc.name || "Sheet", x: 120, y: 90 });
-    w.body.style.cssText = "width:min(560px,90vw);height:min(680px,80vh);padding:0;resize:both;overflow:hidden";
+    w.el.dataset.noscale = "1";   // the sheet is its own page: give it the room, don't magnify it
+    if (!w.el.style.width) Object.assign(w.el.style, { width: "min(560px, 90vw)", height: "min(680px, 80vh)" });
+    w.body.style.cssText = "padding:0;overflow:hidden";
     w.body.innerHTML = `<iframe src="${SHEET_URL}?char=${encodeURIComponent(pc.id)}" style="width:100%;height:100%;border:0" title="Character sheet"></iframe>`;
   }
   w.show();
 }
-// Right-click a PC token: a floating, draggable window (stays open, refreshes itself). Other tokens get the quick popup.
-const tokWins = {};
-async function openTokenWindow(e, id) {
-  const t = S.tokens[id], name = t.label || id, pcId = isPcToken(t) ? await pcIdFor(t) : null;
-  let w = tokWins[id];
-  if (!w) {
-    w = tokWins[id] = floatWindow({ id: "token-" + id, title: name, x: Math.max(0, Math.min(innerWidth - (pcId ? 410 : 280), e.clientX + 12)), y: Math.max(40, Math.min(innerHeight - (pcId ? 620 : 260), e.clientY + 12)) });
-    w.body.classList.add("tokwin");
-  }
-  w.el.querySelector(".fwin-title").textContent = name;
-  if (pcId && w.charPc !== pcId) {   // a PC: the whole companion (Character, Actions, Spells, Inventory, Features, with every roll) lives in the window
-    w.charPc = pcId; w.body.classList.remove("tokwin"); w.body.classList.add("charwin");
-    w.body.style.cssText = "width:min(390px,92vw);height:min(600px,84vh);padding:0;display:flex;flex-direction:column;overflow:hidden;resize:both";
-    w.body.innerHTML = `${S.isGM ? '<details class="tokctl"><summary>Token controls</summary><div class="tokwin-box"></div></details>' : ""}<iframe src="${SHEET_URL}?char=${encodeURIComponent(pcId)}&embed=1" style="flex:1;width:100%;border:0;min-height:0" title="${name.replace(/[&<>"]/g, "")}"></iframe>`;
-  }
-  w.show(); fillTokenWindow(w, id);
-}
-function fillTokenWindow(w, id) {
-  if (!S.tokens[id] || !visibleToPlayer(S.tokens[id], Object.values(S.map.fog || {}), S.isGM, S.currentVisible, S.map.exploredEnabled !== false)) { w.hide(); return; }
-  w.el.querySelector(".fwin-title").textContent = S.tokens[id].label || id;
-  if (w.charPc) { const ctl = w.body.querySelector(".tokwin-box"); if (ctl && !w.body.querySelector("details.tokctl")?.contains(document.activeElement)) { ctl.replaceChildren(); buildTokenMenu(ctl, id, () => setTimeout(() => fillTokenWindow(w, id), 250), () => ctl.isConnected && !w.el.hidden); } return; }   // the companion iframe stays put
-  const box = document.createElement("div"); box.className = "tokwin-box"; w.body.replaceChildren(box);
-  buildTokenMenu(box, id, () => setTimeout(() => fillTokenWindow(w, id), 250), () => w.body.firstChild === box && !w.el.hidden);
-}
 document.addEventListener("turnchanged", drawTokens);
-document.addEventListener("tokenschanged", () => {   // keep open windows current (unless you're typing in one)
-  for (const [id, w] of Object.entries(tokWins)) if (!w.el.hidden && !w.body.contains(document.activeElement)) fillTokenWindow(w, id);
-});
 async function showTokenMenu(e, id) {
   closeTokMenu();
   const t = S.tokens[id]; if (!t || !visibleToPlayer(t, Object.values(S.map.fog || {}), S.isGM, S.currentVisible, S.map.exploredEnabled !== false)) return;
-  if (S.isGM || isPcToken(t)) return openTokenWindow(e, id);   // a floating, movable window (GM: every token)
-  const x = e.clientX, y = e.clientY, esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const x = e.clientX, y = e.clientY;
   const menu = tokMenu = document.createElement("div"); menu.id = "tokmenu"; menu.dataset.tid = id;
-  menu.style.left = x + "px"; menu.style.top = y + "px"; document.body.appendChild(menu);
-  buildTokenMenu(menu, id, closeTokMenu, () => alive());
+  document.body.appendChild(menu);
+  const place = () => { const r = menu.getBoundingClientRect(); menu.style.left = Math.max(4, Math.min(innerWidth - r.width - 4, x)) + "px"; menu.style.top = Math.max(4, Math.min(innerHeight - r.height - 4, y)) + "px"; };
+  const built = buildTokenMenu(menu, id, closeTokMenu, () => tokMenu === menu);
+  place(); await built; place();
 }
 // Fills a container with a token's info and controls. done() is called after a button action; alive() says whether the container is still showing.
 async function buildTokenMenu(menu, id, done, alive) {
@@ -422,7 +398,7 @@ async function openNpcWindow(tid) {
   const c = await sheetOf(t, null), esc = (v) => String(v ?? "").replace(/[&<>"]/g, (m) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[m]));
   if (!c) { w.body.textContent = "No stat block found for this token."; return; }
   const cb = c.combat || {}, st = c.stats || {}, sp = c.spellcasting;
-  w.body.innerHTML = `<div style="font:15px Georgia,serif;line-height:1.45"><b style="font-size:18px">${esc(c.name || t.label)}</b><div>${esc([c.size, c.species || c.race, c.class, c.level ? "Lv " + c.level : ""].filter(Boolean).join(" · "))}</div>
+  w.body.innerHTML = `<div style="line-height:1.45"><b style="font-size:1rem">${esc(c.name || t.label)}</b><div>${esc([c.size, c.species || c.race, c.class, c.level ? "Lv " + c.level : ""].filter(Boolean).join(" · "))}</div>
     <div>AC <b>${esc(cb.ac ?? "—")}</b> · HP <b>${esc(t.hp ?? cb.hp_max ?? "—")}${t.max ? " / " + esc(t.max) : ""}</b> · Speed ${esc(cb.speed ?? "—")}</div>
     <div>${Object.entries(st).map(([k, v]) => `${esc(k.toUpperCase())} <b>${esc(v)}</b>`).join(" · ")}</div>
     ${(c.attacks || []).length ? `<hr><b>Attacks</b>` + c.attacks.map((a) => `<div>${esc(a.name)} ${esc(a.to_hit ?? a.attack_bonus ?? "")} · ${esc(a.damage || a.damage_dice || "")} ${esc(a.damage_type || "")}</div>`).join("") : ""}
@@ -430,6 +406,7 @@ async function openNpcWindow(tid) {
 }
 // Generic right-click menu: items are [label, action]; stays open until you pick something or click away.
 function showActionMenu(e, title, items, fields = []) {
+  closeTokMenu();
   const menu = tokMenu = document.createElement("div"); menu.id = "tokmenu";
   const b = document.createElement("b"); b.textContent = title; menu.append(b);
   for (const [label, fn] of items) { const btn = document.createElement("button"); btn.textContent = label; btn.addEventListener("click", () => { closeTokMenu(); fn(); }); menu.append(btn); }
@@ -466,21 +443,19 @@ async function setView(on, first = false) {
   if (on) document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));   // 3D is for running the game: drop any active build tool
   S.v3d = on ? v3d : null;   // the bar tools (fit, ruler, ping) check this to act on the 3D scene instead
   on ? v3d.open() : v3d.close();
-  v3d.setControls(true); v3d.setOrbit(!!S.orbit); v3d.setFirstPerson(on && first ? myTokenId() : null); S.firstPerson = on && first && v3d.isFirstPerson(); document.dispatchEvent(new Event("view3dchange"));
+  v3d.setControls(true); v3d.setFirstPerson(on && first ? myTokenId() : null); S.firstPerson = on && first && v3d.isFirstPerson(); document.dispatchEvent(new Event("view3dchange"));
 }
 {   // the flat view is the 3D table seen straight down
-  const top = addBarButton({ quick: true, id: "top", icon: "⬒", label: "Top-down", title: "Look straight down: build, draw and aim here", toggle: true, onClick: (e, b) => S.v3d?.setTopDown(b.classList.contains("on")) });
+  const top = addBarButton({ quick: true, id: "top", icon: "⬒", label: "Top-down", title: "Look straight down", toggle: true, onClick: (e, b) => S.v3d?.setTopDown(b.classList.contains("on")) });
   document.addEventListener("topdownchange", () => top.classList.toggle("on", !!S.v3d?.isTopDown()));
-  orderQuickBar(["top", "select", "ruler", "ping", "dice", "grid", "fit", "annotations", "orbit", "me", "reference", "explored", "explored-reset"]);
 }
-$("#view-btn").addEventListener("click", (e) => { e.stopPropagation(); const b = e.currentTarget; b.classList.add("on"); dropMenu(b, [[(S.v3d?.isTopDown() ? "✓ " : "   ") + "Top-down", () => S.v3d?.setTopDown(true)], [(!S.v3d?.isTopDown() && !S.firstPerson ? "✓ " : "   ") + "3D", () => { S.v3d?.setTopDown(false); setView(true); }], [(S.firstPerson ? "✓ " : "   ") + "1st person", () => setView(true, true)], ...(S.isGM ? [["Reference", () => import("./refimage.js").then((m) => m.toggleRefImage())], ["Reference opacity…", () => import("./refimage.js").then((m) => m.openRefControls())], ["Replace…", () => openReplace()]] : [])]); setTimeout(() => document.addEventListener("pointerdown", () => b.classList.remove("on"), { once: true }), 0); });
 
 // Drag a token in 3D: press on it, drag along the floor, release to snap to the cell (same rules as 2D).
 {
   let drag = null;
   document.addEventListener("pointerdown", (e) => {
     drag = null;
-    if (!S.v3d || S.orbit || S.firstPerson || e.button !== 0 || !e.target.closest?.("#view3d") || S.v3d.controlsBlocked()) return;
+    if (!S.v3d || S.firstPerson || S.tool || S.placing || e.button !== 0 || !e.target.closest?.("#view3d") || S.v3d.controlsBlocked()) return;
     const id = S.v3d.pickToken(e.clientX, e.clientY);
     if (!id || !S.isGM) return;
     drag = { id, x0: e.clientX, y0: e.clientY, moved: false, cell: null };
@@ -506,7 +481,7 @@ function open3dMenu(e, hit) {
   const { type, id } = hit;
   if (type === "token") return showTokenMenu(e, id);
   if (!S.isGM) return;
-  if (type === "object") { const o = S.objects[id]; if (o) showActionMenu(e, o.label || o.kind, [...(o.kind === "door" ? [[o.state === "open" ? "Close" : "Open", () => put(`objects/${id}/state`, o.state === "open" ? "closed" : "open")], [o.locked ? "Unlock" : "Lock", () => put(`objects/${id}/locked`, o.locked ? null : true)]] : []), [o.hidden ? "Reveal to players" : "Hide from players", () => put(`objects/${id}/hidden`, !o.hidden)], ["Delete", () => put(`objects/${id}`, null)]], settingsFor("object", id).fields); }
+  if (type === "object") { const o = S.objects[id]; if (o) showActionMenu(e, o.label || o.kind, [...(o.kind === "door" ? [[o.state === "open" ? "Close" : "Open", () => put(`objects/${id}/state`, o.state === "open" ? "closed" : "open")], [o.locked ? "Unlock" : "Lock", () => put(`objects/${id}/locked`, o.locked ? null : true)]] : []), ...(o.kind !== "door" && o.kind !== "light" ? [["Logic", () => openLogic(id)]] : []), [o.hidden ? "Reveal to players" : "Hide from players", () => put(`objects/${id}/hidden`, !o.hidden)], ["Delete", () => put(`objects/${id}`, null)]], settingsFor("object", id).fields); }
   else if (type === "prop") { const a = S.map.props[id]; if (a) showActionMenu(e, a.kind, [[a.hidden ? "Reveal to players" : "Hide from players", () => put(`map/props/${id}/hidden`, a.hidden ? null : true)], ["Delete", () => put(`map/props/${id}`, null)]], settingsFor("prop", id).fields); }
   else if (type === "wall") showActionMenu(e, "Wall", [["Delete", () => put(`map/walls/${id}`, null)]], settingsFor("wall", id).fields);
 }
@@ -525,6 +500,11 @@ function useObject(id) {   // the same as clicking it in 2D
   document.addEventListener("pointerup", (e) => {
     const d = down; down = null;
     if (!d || !S.v3d || Math.hypot(e.clientX - d.x, e.clientY - d.y) > 5 || S.v3d.controlsBlocked()) return;
+    if (d.button === 0 && (S.tool || S.placing)) return;   // building: that click drew something
+    if (d.button === 0 && S.puzzleMode) {   // traps and triggers in the angled view: the same clicks the flat layer takes
+      if (S.pick) { const p = S.v3d.groundAt(e.clientX, e.clientY); if (p) pickSpot(p); return; }
+      const hit = S.v3d.pickAt(e.clientX, e.clientY); if (hit?.type === "object") toggleSelected(hit.id); return;
+    }
     if (d.button === 0 && !S.select3d) { const hit = S.v3d.peekAt(e.clientX, e.clientY); if (hit?.type === "object") useObject(hit.id); return; }
     if (d.button !== 0 && d.button !== 2) return;
     closeTokMenu();
@@ -533,13 +513,21 @@ function useObject(id) {   // the same as clicking it in 2D
     const p = S.v3d.groundAt(e.clientX, e.clientY);
     if (p && S.isGM && d.button === 2) groundMenu(e, p);
   }, true);
-  document.addEventListener("contextmenu", (e) => { if (e.target.closest?.("#view3d")) e.preventDefault(); });
+  document.addEventListener("contextmenu", (e) => e.preventDefault());   // no browser right-click menu anywhere on the table
   document.addEventListener("view3dchange", () => { if (!S.v3d) { S.select3d = false; document.getElementById("bar-select")?.classList.remove("on"); } });
+}
+
+// Build tools in the angled view: the left button draws on the floor under the pointer (top-down uses the flat layer).
+{
+  const floorUnder = (e) => S.isGM && (S.tool || S.placing) && S.v3d && !S.v3d.isTopDown() && e.target.closest?.("#view3d canvas") ? S.v3d.groundAt(e.clientX, e.clientY) : null;
+  document.addEventListener("pointerdown", (e) => { const p = e.button === 0 && floorUnder(e); if (p) toolDown(e, p); });
+  document.addEventListener("pointermove", (e) => { const p = floorUnder(e); if (p) toolMove(e, p); });
+  document.addEventListener("pointerup", (e) => { if (e.button === 0 && floorUnder(e)) toolUp(); });
 }
 
 // Page-load "Join the table" card (who you are + camera/mic, then opens the video dock).
 const setMe = (v) => { me = v; try { localStorage.setItem("vtt-me", JSON.stringify(v)); } catch { /* fine */ } const l = document.querySelector("#bar-me .lbl"); if (l) l.textContent = v ? v.name.slice(0, 8) : "Me"; dispatchEvent(new Event("vtt-me-changed")); };
-/* video/voice disabled: initChatDock(); */ initJournal();
+/* video/voice disabled: initChatDock(); */
 /* video/voice disabled: initJoin({ loadPcs, setMe, getMe: () => me }); */
 
 // Start in 3D, walking enabled. A player link may name the character: ?char=<id>.

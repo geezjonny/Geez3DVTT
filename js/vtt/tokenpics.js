@@ -1,15 +1,14 @@
-// Token picture picker. The art lives in the GeezSheets site (hosted, ~420 portraits), so nothing is copied here.
+// Token picture picker for the portraits in token/ (listed by token/index.json).
 import { S } from "./state.js";
 import { put } from "./undo.js";
 import { floatWindow } from "./ui.js";
+import { TOKEN_BASE, tokenFileName as nice } from "./token-palette.js";
 
-export const TOKEN_BASE = "https://geezjonny.github.io/GeezSheets/tokens/";
 let win = null, names = null, grid, filter, target = null;
-const nice = (f) => f.replace(/\.png$/, "").replace(/[_-]+/g, " ");
 
-async function load() {
+export async function loadArt() {
   if (names) return names;
-  try { names = await (await fetch(TOKEN_BASE + "index.json")).json(); } catch (err) { console.warn("Could not load token list", err); names = []; }
+  try { names = await (await fetch(TOKEN_BASE + "index.json")).json(); } catch (err) { console.warn("Could not load token list", err); return []; }
   return names;
 }
 function render() {
@@ -31,5 +30,5 @@ export async function openTokenPicker(tokenId) {
     const clear = document.createElement("button"); clear.textContent = "Remove picture"; clear.addEventListener("click", () => { if (target) put(`tokens/${target}/img`, null); win.hide(); });
     grid = document.createElement("div"); grid.className = "tp-grid"; win.body.append(filter, clear, grid);
   }
-  win.show(); filter.value = ""; grid.textContent = "Loading…"; await load(); render(); filter.focus();
+  win.show(); filter.value = ""; grid.textContent = "Loading…"; await loadArt(); render(); filter.focus();
 }

@@ -10,12 +10,7 @@
   <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.min.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"}}</script>
 </head>
 <body>
-  <header>
-    <h1>Geez 3D Table</h1>
-    <nav id="menubar"><button id="file-btn" type="button" hidden>File</button><button id="add" hidden>Build</button><button id="table-btn" type="button" hidden>Table</button><button id="atmo-btn" type="button" hidden>Atmosphere</button><button id="audio-btn" type="button">Audio</button><button id="chat-btn" type="button" hidden>Chat</button><button id="journal-btn" type="button">Journal</button><button id="view-btn" type="button">View</button><button id="mode" hidden>Puzzle</button></nav>
-    <span class="grow"></span><span id="role"></span>
-  </header>
-  <div id="addmenu" hidden></div>
+  <div hidden><button id="mode" type="button" hidden>Puzzle</button><span id="role"></span></div>
   <div id="toolbar" hidden></div>
   <main>
     <div class="paper">
@@ -44,7 +39,6 @@
         <g id="walls"></g>
         <g id="objects"></g>
         <g id="tokens"></g>
-        <g id="annotations"></g>
         <g id="roofs"></g>
         <g id="explored-memory"></g>
         <g id="fog"></g>
