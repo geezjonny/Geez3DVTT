@@ -7,7 +7,8 @@ import { el, PROPS, PROP_CATALOG, drawObjects } from "./draw.js";
 import { renderPanel } from "./panel.js";
 import { floatWindow, addBarButton, toolbar, svg } from "./ui.js";
 import { generateDungeon } from "./gen.js";
-import { segmentDoors } from "./door-segment.js";
+import { cutWall, segmentDoors } from "./door-segment.js";
+import { doorSeg } from "./reach.js";
 import { LIGHT_MATS, LIGHT_DEFAULT, lightSettings, clampIntensity, lightIntensity } from "./light-types.js";
 import { recentTokenRefs, tokenInitials, TOKEN_BASE, tokenFileName, artFor } from "./token-palette.js";
 import { loadArt } from "./tokenpics.js";
@@ -146,7 +147,7 @@ const KP = {
   fog: { key: "fog", label: "Fog" }, label: { key: "label", label: "Labels", fixed: "place" },
 };
 let palObj = "plate", palProp = "crate", palLight = LIGHT_DEFAULT.id, palRot = 0, palScale = 1, palColor = "", palRandomRot = false, palRandomScale = false, palFlip = false;
-let fogMode = "cover", labelEdit = null;
+let fogMode = "cover", floorMode = "paint", labelEdit = null;
 const labelSettings = { text: "", size: 1, color: "#3d2632" };
 let labelRecent = [];
 try { labelRecent = JSON.parse(localStorage.getItem("vtt-recent-labels") || "[]"); } catch { /* first run */ }
@@ -177,7 +178,7 @@ function optionsHTML(k) {
 }
 const winHTML = (k) => { const c = KP[k]; return k === "elevation" ? `<label class="elev-value">Height <input data-elev type="number" step="5" value="${curElev}"></label><div class="bt-recent elev-presets">${SEED.elevation.map((v) => chipHTML(k, v)).join("")}</div>` : `<div class="bt-recent"></div>${c.props ? `<div class="bt-recent bt-fixed">${SOURCES.map((v) => chipHTML(k, v)).join("")}</div>` : ""}<select data-more aria-label="More ${c.label}">${optionsHTML(k)}</select>`
   + (c.door ? `<button type="button" class="swatch bt-win" data-win title="Windows never open; sight passes">Window</button>` : "")
-  + (c.key === "floor" ? `<label class="bt-walls"><input type="checkbox" data-walls ${wallsAround ? "checked" : ""}> Draw walls around it</label>` : "")
+  + (c.key === "floor" ? `<div class="fog-modes"><button type="button" data-floor-mode="paint">Paint</button><button type="button" data-floor-mode="cut" title="Drag to cut away the map picture, showing the floor below">Cut picture</button><button type="button" data-floor-mode="restore" title="Drag over a cut to put the picture back">Restore</button></div><label class="bt-walls"><input type="checkbox" data-walls ${wallsAround ? "checked" : ""}> Draw walls around it</label>` : "")
   + (k === "light" ? `<div class="light-values"><label>Radius <input data-o="radius" type="number" min="1" max="12" step="1"></label><label>Fog <input data-o="fog" type="number" min="0" max="12" step="1"></label><label>Intensity <input data-o="intensity" type="range" min="0.2" max="1.5" step="0.05"><output data-intensity></output></label></div>` : "")
   + (k === "fog" ? `<div class="fog-modes"><button type="button" data-fog-mode="reveal">Reveal</button><button type="button" data-fog-mode="cover">Cover</button><button type="button" data-fog-mode="clear">Clear</button></div><div class="fog-actions"><button type="button" data-fog-all="reveal">Clear all</button><button type="button" data-fog-all="cover">Cover all</button></div>` : "")
   + (c.props ? `<div class="prop-options"><label>Rotation <input data-pal="rot" type="number" min="0" max="359" value="${palRot}" style="width:4rem"></label><label><input data-pal="rrot" type="checkbox"> random</label><label>Scale <input data-pal="scale" type="number" min="0.1" max="30" step="0.1" value="${palScale}" style="width:4rem"></label><label>Color <input data-pal="color" type="color" value="${palColor || "#ffffff"}"></label><button type="button" data-pal-natural>natural</button><label><input data-pal="rscale" type="checkbox"> random</label><label><input data-pal="flip" type="checkbox"> Mirror</label></div>` : ""); };
@@ -195,6 +196,7 @@ function syncPalette() {
     w.body.querySelectorAll("[data-v]").forEach((b) => b.classList.toggle("on", b.dataset.v === current(k)));
     w.body.querySelector("[data-win]")?.classList.toggle("on", bt.window);
     w.body.querySelectorAll("[data-fog-mode]").forEach((b) => b.classList.toggle("on", b.dataset.fogMode === fogMode));
+    w.body.querySelectorAll("[data-floor-mode]").forEach((b) => b.classList.toggle("on", b.dataset.floorMode === floorMode));
   }
 }
 function renderLightValues() { const w = kw.light?.body, s = lightValues[palLight] || lightSettings(LIGHT_DEFAULT); if (!w) return; w.querySelector('[data-o="radius"]').value = s.radius; w.querySelector('[data-o="fog"]').value = s.fog; w.querySelector('[data-o="intensity"]').value = s.intensity; w.querySelector("[data-intensity]").value = s.intensity.toFixed(2); }
@@ -213,9 +215,10 @@ function kindWin(kind) {
   w.body.addEventListener("click", (e) => {
     if (e.target.closest("[data-pal-natural]")) { palColor = ""; w.body.querySelector('[data-pal="color"]').value = "#ffffff"; return; }
     const fm = e.target.closest("[data-fog-mode]"); if (fm) { fogMode = fm.dataset.fogMode; syncPalette(); return; }
+    const cut = e.target.closest("[data-floor-mode]"); if (cut) { floorMode = cut.dataset.floorMode; activate(kind); return; }
     const fa = e.target.closest("[data-fog-all]"); if (fa) { const changes = {}; for (const [id, a] of Object.entries(S.map.fog || {})) if ((a.lv ?? 0) === (S.level ?? 0)) changes[`map/fog/${id}`] = fa.dataset.fogAll === "cover" ? { ...a, open: false } : null; return patch(changes); }
     if (e.target.closest("[data-win]")) { bt.window = !bt.window; return pick(kind, current(kind)); }
-    const chip = e.target.closest("[data-v]"); if (chip) pick(kind, chip.dataset.v);
+    const chip = e.target.closest("[data-v]"); if (chip) { if (kind === "floor") floorMode = "paint"; pick(kind, chip.dataset.v); }
     const elev = e.target.closest("button[data-elev]"); if (elev) { curElev = Number(elev.dataset.elev); w.body.querySelector("input[data-elev]").value = curElev; bt.kind = kind; applyPal(); }
   });
   w.body.addEventListener("change", (e) => { if (kind === "elevation" && e.target.matches("[data-elev]")) { curElev = Number(e.target.value) || 0; return; } if (e.target.matches("[data-walls]")) { wallsAround = e.target.checked; return; } if (e.target.matches("[data-more]") && e.target.value) { pick(kind, e.target.value); e.target.value = ""; } });
@@ -335,17 +338,6 @@ function beginSegment(type, e, p) {
   capture(e); preview();
 }
 // One wall per place: whatever part of an existing wall lies under a new wall (or a door) is cut away; the rest of it stays.
-// Cut the part of wall w that lies under the segment a-b: null if they don't overlap, else the leftover pieces of w.
-function cutWall(w, a, b) {
-  const dx = b.x - a.x, dy = b.y - a.y, L2 = dx * dx + dy * dy, L = Math.sqrt(L2); if (!L) return null;
-  const T = (x, y) => ((x - a.x) * dx + (y - a.y) * dy) / L2, off = (x, y) => Math.abs((x - a.x) * dy - (y - a.y) * dx) / L;
-  if (off(w.x1, w.y1) > 1 || off(w.x2, w.y2) > 1) return null;
-  const t1 = T(w.x1, w.y1), t2 = T(w.x2, w.y2), lo = Math.max(0, Math.min(t1, t2)), hi = Math.min(1, Math.max(t1, t2)), e = 0.5 / L;
-  if (hi - lo <= e) return null;
-  const [s0, s1] = t1 < t2 ? [t1, t2] : [t2, t1], q = (t) => ({ x: Math.round(a.x + dx * t), y: Math.round(a.y + dy * t) }), out = [];
-  for (const [u, v] of [[s0, lo], [hi, s1]]) if (v - u > e) { const p = q(u), r = q(v); out.push({ ...w, x1: p.x, y1: p.y, x2: r.x, y2: r.y }); }
-  return out;
-}
 function wallClear(a, b, changes) {
   const lv = S.level ?? S.map.level ?? 0;
   for (const [id, w] of Object.entries(S.map.walls || {})) {
@@ -363,16 +355,13 @@ export function cleanOverlaps() {
   if (Object.keys(changes).length) patch(JSON.parse(JSON.stringify(changes)));
   return { before, after: cur.size };
 }
-// Doors and windows sitting on a new wall's line are replaced by it.
-function doorsClear(a, b, changes) {
-  const vert = a.x === b.x, horiz = a.y === b.y; if (!vert && !horiz) return;
-  const lv = S.level ?? 0, ax = vert ? "y" : "x", lo = Math.min(a[ax], b[ax]), hi = Math.max(a[ax], b[ax]);
-  for (const [id, o] of Object.entries(S.objects)) {
-    if (o.kind !== "door" || (o.lv ?? 0) !== lv || (o.dir === "v") !== vert || (vert ? o.x : o.y) !== (vert ? a.x : a.y)) continue;
-    const n = (o.doorKind || o.kind) === "double" ? 40 : 20;
-    if (o[ax] + n > lo && o[ax] - n < hi) changes[`objects/${id}`] = null;
-  }
+// Doors and windows under a-b, on this floor (imported ones keep their own exact line, so compare lines, not cells).
+function doorsUnder(a, b) {
+  const lv = S.level ?? S.map.level ?? 0;
+  return Object.entries(S.objects).filter(([, o]) => { if (o.kind !== "door" || (o.lv ?? 0) !== lv) return false; const [x1, y1, x2, y2] = doorSeg(o); return cutWall({ x1, y1, x2, y2 }, a, b); });
 }
+// Doors and windows sitting on a new wall's line are replaced by it.
+function doorsClear(a, b, changes) { for (const [id] of doorsUnder(a, b)) changes[`objects/${id}`] = null; }
 function placeWall(a, b, mat, extra = {}) {
   const changes = {}; wallClear(a, b, changes); doorsClear(a, b, changes);
   changes[`map/walls/${uid("w")}`] = { x1: a.x, y1: a.y, x2: b.x, y2: b.y, lv: S.level ?? 0, ...(mat ? { mat } : {}), ...extra };
@@ -381,15 +370,16 @@ function placeWall(a, b, mat, extra = {}) {
 function placeDoors(d) {
   const segment = segmentDoors(d.a, d.b), cells = segment.cells;
   if (!cells.length) return;
-  const doors = Object.entries(S.objects).filter(([, o]) => o.kind === "door" && (o.lv ?? 0) === (S.level ?? 0));
-  const byEdge = new Map(doors.map(([id, o]) => [`${o.x},${o.y},${o.dir}`, [id, o] ]));
   const n = Object.values(S.objects).filter((o) => o.kind === "door").length;
   const extra = curMode === "window" ? { dir: segment.dir, doorKind: "window", win: true, mat: matOf() || "" } : { dir: segment.dir, doorKind: "wood", win: false, mat: matOf() || "" };
-  const changes = {};
+  const changes = {}, reused = new Set();
   cells.forEach((cell, i) => {
-    const old = byEdge.get(`${cell.x},${cell.y},${cell.dir}`), id = old?.[0] || `do${Date.now().toString(36)}${i}`;
-    const dv = cell.dir === "v"; wallClear({ x: cell.x - (dv ? 0 : 20), y: cell.y - (dv ? 20 : 0) }, { x: cell.x + (dv ? 0 : 20), y: cell.y + (dv ? 20 : 0) }, changes);
-    changes[`objects/${id}`] = { ...(old?.[1] || newObject("door", cell.x, cell.y, n + i + 1)), x: cell.x, y: cell.y, sx: cell.x, sy: cell.y, ...extra, lv: S.level ?? 0 };
+    const dv = cell.dir === "v", a = { x: cell.x - (dv ? 0 : 20), y: cell.y - (dv ? 20 : 0) }, b = { x: cell.x + (dv ? 0 : 20), y: cell.y + (dv ? 20 : 0) };
+    wallClear(a, b, changes);
+    const under = doorsUnder(a, b), old = under.find(([id]) => !reused.has(id)), id = old?.[0] || `do${Date.now().toString(36)}${i}`;   // reusing the id keeps its connections
+    reused.add(id); for (const [other] of under) if (!reused.has(other)) changes[`objects/${other}`] = null;
+    const { seg, ...kept } = old?.[1] || newObject("door", cell.x, cell.y, n + i + 1);   // an imported line would override the new place
+    changes[`objects/${id}`] = { ...kept, x: cell.x, y: cell.y, sx: cell.x, sy: cell.y, ...extra, lv: S.level ?? 0 };
   });
   patchGrowing(changes, d.a, d.b);
 }
@@ -403,12 +393,36 @@ const onLevel = (a) => (a.lv ?? 0) === (S.level ?? S.map.level ?? 0);
 function paintElevation(rects, elev = curElev) { const changes = applyElevation(S.map.floors, rects, elev, S.level ?? S.map.level ?? 0); if (Object.keys(changes).length) patch(changes); }
 export function fogAt(p) { return Object.entries(S.map.fog || {}).find(([, a]) => onLevel(a) && inRect(p, a))?.[0]; }
 export function roofAt(p) { return Object.entries(S.map.roofs).find(([, a]) => onLevel(a) && inRect(p, a))?.[0]; }
+function placeProp(p) {
+  if (SOURCES.includes(palProp)) return placeObject(palProp, p, palProp === "tripwire" ? { dir: palRot % 180 === 90 ? "v" : "h" } : { rot: palRot });   // these work, so they are puzzle objects
+  const c = cellOf(p), rot = palRandomRot ? Math.floor(Math.random() * 4) * 90 : palRot, s = palRandomScale ? .5 + Math.random() * 1.5 : palScale; put(`map/props/${uid("p")}`, { kind: opt("prop")?.value || palProp, x: c.x, y: c.y, lv: S.level ?? 0, rot, s, ...(palColor ? { color: palColor } : {}), ...(palFlip ? { flip: true } : {}) });
+}
+// Right-click > Duplicate: a copy one square along (a door slides along its own line).
+export function duplicate(type, id) {
+  const all = type === "token" ? S.tokens : type === "prop" ? S.map.props : S.objects, from = all?.[id]; if (!from) return;
+  const door = type === "object" && from.kind === "door", axis = door && from.dir === "v" ? "y" : "x", step = door && from.doorKind === "double" ? 80 : 40;
+  const m = mapSize(), low = m[axis] * 40, high = (m[axis] + (axis === "x" ? m.cols : m.rows)) * 40;
+  const half = step / 2, line = (at) => (axis === "x" ? [{ x: at.x - half, y: at.y }, { x: at.x + half, y: at.y }] : [{ x: at.x, y: at.y - half }, { x: at.x, y: at.y + half }]);
+  const taken = (at) => (door ? doorsUnder(...line(at)).length > 0 : Object.values(all).some((o) => (o.lv ?? 0) === (from.lv ?? 0) && o.x === at.x && o.y === at.y));
+  const spots = [1, -1].flatMap((sign) => Array.from({ length: 20 }, (_, i) => ({ x: from.x, y: from.y, [axis]: from[axis] + sign * step * (i + 1) })));
+  const at = spots.find((s) => s[axis] > low && s[axis] < high && !taken(s)); if (!at) return;
+  const used = new Set(Object.values(all).map((o) => o.label)), base = String(from.label ?? "").replace(/ \d+$/, ""); let n = 2;
+  while (used.has(`${base} ${n}`)) n++;
+  const { seg, ...copy } = JSON.parse(JSON.stringify(from)), named = from.label ? { label: `${base} ${n}` } : {};
+  const changes = {};
+  if (door) { wallClear(...line(at), changes); }
+  const path = type === "token" ? "tokens" : type === "prop" ? "map/props" : "objects";
+  changes[`${path}/${uid(type === "object" ? from.kind : type[0])}`] = { ...copy, ...at, ...named, lv: from.lv ?? 0, ...(type === "object" ? { sx: at.x, sy: at.y } : {}) };
+  patch(changes);
+}
+
 // ---- pointer handling (called from vtt.js; return true when the event was used) ----
 export function toolDown(e, p) {
   if (!S.isGM) return false;
   if (S.placing) { if (S.placing === "door") beginSegment("door", e, p); else placeObject(S.placing, p); return true; }
   const t = S.tool;
-  if (!t) {   // no tool: GM can drag props around
+  if (t === "prop" && SOURCES.includes(S.objects[e.target.closest?.(".obj")?.dataset.id]?.kind)) return false;   // vtt.js drags levers and traps
+  if (!t || (t === "prop" && e.target.closest(".prop"))) {   // GM drags props around, also while placing them
     const el_ = e.target.closest(".prop"); if (!el_ || S.puzzleMode && e.target.closest(".obj")) return false;
     drag = { type: "propmove", id: el_.dataset.id, el: el_, x0: p.x, y0: p.y, moved: false };
     $("#map").setPointerCapture(e.pointerId); return true;
@@ -421,9 +435,9 @@ export function toolDown(e, p) {
     else put(`map/labels/${uid("l")}`, { x: c.x, y: c.y, text, size: labelSettings.size, color: labelSettings.color, rot: 0, lv: S.level ?? 0 });
     rememberLabel(text); renderLabelWindow();
   }
-  else if (t === "prop" && SOURCES.includes(palProp)) placeObject(palProp, p, palProp === "tripwire" ? { dir: palRot % 180 === 90 ? "v" : "h" } : { rot: palRot });   // these work, so they are puzzle objects
-  else if (t === "prop") { const c = cellOf(p), rot = palRandomRot ? Math.floor(Math.random() * 4) * 90 : palRot, s = palRandomScale ? .5 + Math.random() * 1.5 : palScale; put(`map/props/${uid("p")}`, { kind: opt("prop")?.value || palProp, x: c.x, y: c.y, lv: S.level ?? 0, rot, s, ...(palColor ? { color: palColor } : {}), ...(palFlip ? { flip: true } : {}) }); }
+  else if (t === "prop") placeProp(p);
   else if (t === "wall") beginSegment("wall", e, p);
+  else if (t === "floor" && floorMode !== "paint") { const c = openCell(p); drag = { type: "cut", mode: floorMode, a: c, b: c }; capture(e); preview(); }
   else if (t === "floor" || t === "roof" || t === "fog" || t === "elevation") { const c = t === "floor" ? openCell(p) : cellOf(p); drag = { type: t, a: c, b: c }; capture(e); preview(); }
   return true;
 }
@@ -438,7 +452,6 @@ function ghostSegments() {
   const { x, y, w, h } = rectOf(drag);
   return [[x, y, x + w, y], [x + w, y, x + w, y + h], [x + w, y + h, x, y + h], [x, y + h, x, y]];
 }
-// shortcut: a prop being dragged has no ghost; props are only draggable in the top-down view.
 // The element under the pointer keeps the drag: the flat layer in top-down, the 3D canvas in the angled view.
 const capture = (e) => (e.target.ownerSVGElement ? $("#map") : e.target).setPointerCapture(e.pointerId);
 function preview() {
@@ -455,18 +468,26 @@ export function toolMove(e, p) {
     return true;
   }
   if (drag.type === "wall" || drag.type === "door") { const b = segmentEnd(drag.a, p); drag.b = b; drag.moved = drag.a.x !== b.x || drag.a.y !== b.y; preview(); return true; }
-  drag.b = drag.type === "floor" ? openCell(p) : cellOf(p); preview(); return true;
+  drag.b = drag.type === "floor" || drag.type === "cut" ? openCell(p) : cellOf(p); preview(); return true;
 }
 export function toolUp() {
   if (!drag) return false;
   const d = drag;
   if ((d.type === "wall" || d.type === "door") && d.pending && !d.moved) { preview(); return true; }
   drag = null; preview();
-  if (d.type === "propmove") { if (d.moved && d.to) patch({ [`map/props/${d.id}/x`]: d.to.x, [`map/props/${d.id}/y`]: d.to.y }); return true; }
+  if (d.type === "propmove") {
+    if (d.moved && d.to) patch({ [`map/props/${d.id}/x`]: d.to.x, [`map/props/${d.id}/y`]: d.to.y });
+    else if (!d.moved && S.tool === "prop") placeProp({ x: d.x0, y: d.y0 });   // a plain click on a prop while placing still places
+    return true;
+  }
   if (d.type === "wall") { if (d.a.x !== d.b.x || d.a.y !== d.b.y) placeWall(d.a, d.b, matOf()); return true; }
   if (d.type === "door") { placeDoors(d); return true; }
   const r = rectOf(d);
-  if (d.type === "elevation") paintElevation([r]);
+  if (d.type === "cut") {
+    if (d.mode === "cut") put(`map/holes/${uid("h")}`, { ...r, lv: S.level ?? 0 });   // whole squares: a click cuts one
+    else { const gone = Object.entries(S.map.holes || {}).filter(([, a]) => onLevel(a) && a.x < r.x + r.w && a.x + a.w > r.x && a.y < r.y + r.h && a.y + a.h > r.y); if (gone.length) patch(Object.fromEntries(gone.map(([id]) => [`map/holes/${id}`, null]))); }
+  }
+  else if (d.type === "elevation") paintElevation([r]);
   else if (d.type === "roof") put(`map/roofs/${uid("r")}`, { ...r, open: false, lv: S.level ?? 0, ...(matOf() ? { mat: matOf() } : {}) });
   else if (d.type === "fog") {
     if (fogMode === "clear") Object.entries(S.map.fog || {}).filter(([, a]) => (a.lv ?? 0) === (S.level ?? 0) && inRect({ x: a.x + a.w / 2, y: a.y + a.h / 2 }, r)).forEach(([id]) => put(`map/fog/${id}`, null));

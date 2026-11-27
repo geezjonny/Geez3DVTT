@@ -3,7 +3,7 @@ export const $ = (s) => document.querySelector(s);
 export const emptyDraft = () => ({ when: [], then: [], pool: [] });
 export const S = {
   isGM: document.documentElement.dataset.role === "gm",   // gm.html is the GM page, index.html the player page
-  objects: {}, tokens: {}, groups: {}, map: { floors: {}, walls: {}, roofs: {}, props: {}, labels: {}, fog: {}, level: 0, levelNames: {} }, level: 0, tool: null,
+  objects: {}, tokens: {}, groups: {}, map: { floors: {}, walls: {}, roofs: {}, props: {}, labels: {}, fog: {}, holes: {}, level: 0, levelNames: {} }, level: 0, tool: null,
   exploredCells: new Set(), currentVisible: new Set(), exploredRedraw: null,
   puzzleMode: false, paused: false, sceneName: "Current scene", round: 1, turnName: "—", initiative: null, selected: new Set(), draft: emptyDraft(),
   atmosphere: { time: 12, weather: "clear", color: "#4d86b8" }, placing: null, pick: null, lastSel: null, dragging: null,

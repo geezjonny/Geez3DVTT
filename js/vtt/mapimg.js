@@ -29,6 +29,7 @@ const setLevelRec = async (lv, rec, replaceAll) => put("mapimg", { ...(replaceAl
 export async function saveMapImage(data, src = null, { replaceAll = false } = {}) {
   if (!data?.imageDataUrl) return;
   const meta = { cols: data.cols, rows: data.rows, ppg: data.ppg || 70 }, lv = levelNow();
+  for (const [id, a] of Object.entries((await read("map/holes")) || {})) if ((a.lv ?? 0) === lv) await put(`map/holes/${id}`, null);   // cuts belonged to the old picture
   if (src) { await setLevelRec(lv, { ...meta, src }, replaceAll); return; }
   let url = data.imageDataUrl;
   if (url.length > MAX_B64) { const r = await shrink(url); url = r.dataUrl; meta.ppg = Math.max(1, Math.round(meta.ppg * r.k)); }

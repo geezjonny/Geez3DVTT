@@ -32,6 +32,13 @@ export function solidSegments(level = null) {
   return segs;
 }
 
+// Can a token use this object from where it stands: same floor, with no wall, closed door or window in between?
+export function canReach(from, o) {
+  const dx = o.x - from.x, dy = o.y - from.y, short = Math.max(0, 1 - 2 / (Math.hypot(dx, dy) || 1));   // stop just short, so a door doesn't block itself
+  const line = [from.x, from.y, from.x + dx * short, from.y + dy * short], lv = o.lv ?? 0;
+  return (from.lv ?? 0) === lv && !solidSegments(lv).some((s) => touches(line, s));
+}
+
 // Is a one-cell step between two cell-centre points blocked (wall, closed door, window, or off the map)?
 export function stepBlocked(from, to) {
   const { cols, rows, x, y } = mapSize();

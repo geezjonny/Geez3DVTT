@@ -1,6 +1,8 @@
 import { read, put, patch } from "../store.js";
 import { S } from "./state.js";
 import { floatWindow, toolbar, dropMenu, svg } from "./ui.js";
+import { buildFile, restorePlan, imageIds } from "./scenefile.js";
+import { exportGeezMap } from "./geezmap-export.js";
 
 const STYLE_ID = "scene-style";
 let saveWin = null, toastTimer = null;
@@ -28,6 +30,35 @@ function sceneId(name) {
   return id || "scene";
 }
 
+const PARTS = ["map", "objects", "tokens", "groups", "initiative", "mapimg", "atmosphere"];   // map holds every floor
+async function snapshot() {
+  const values = await Promise.all(PARTS.map((p) => read(p)));
+  return Object.fromEntries(PARTS.map((p, i) => [p, values[i]]));
+}
+const keepInLibrary = (name, data) => put(`scenes/${sceneId(name)}`, { name, ts: Date.now(), data });
+
+// kind "map" -> <name>.geezmap, "scene" -> <name>.geezscene
+async function download(kind, name, snap) {
+  const images = {};
+  for (const id of imageIds(snap.mapimg)) images[id] = await read(`mapimgs/${id}`);
+  const outer = kind === "map" ? exportGeezMap({ name, map: snap.map || {}, objects: snap.objects || {}, atmosphere: snap.atmosphere || {} }) : {};
+  const file = `${name.replace(/[\\/:*?"<>|]+/g, "_")}.geez${kind}`;
+  const a = Object.assign(document.createElement("a"), { download: file, href: URL.createObjectURL(new Blob([JSON.stringify(buildFile(kind, name, snap, images, outer))], { type: "application/json" })) });
+  a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  return file;
+}
+
+// A .geezmap or .geezscene picked in Import. False when it is some other kind of file.
+export async function restoreFile(json) {
+  const plan = restorePlan(json); if (!plan) return false;
+  const before = await snapshot(), backup = `Before import ${new Date().toLocaleString()}`;
+  await keepInLibrary(backup, before);
+  for (const [id, chunks] of Object.entries(plan.images)) await put(`mapimgs/${id}`, chunks);
+  await patch({ ...plan.changes, seeded: true, scene: { id: sceneId(plan.name), name: plan.name } });
+  toast(`Loaded ${plan.name}. The previous table is saved under Load > Scene.`);
+  return true;
+}
+
 function makeSaveWindow() {
   if (saveWin) return saveWin;
   saveWin = floatWindow({ id: "scene-save", title: "Save Scene", x: 300, y: 160 });
@@ -35,12 +66,13 @@ function makeSaveWindow() {
   const form = saveWin.body.querySelector("form"), input = form.elements.name;
   form.addEventListener("submit", async (e) => {
     e.preventDefault(); const name = input.value.trim(); if (!name) return input.focus();
-    const id = sceneId(name), [map, objects, tokens, groups, initiative, mapimg, old] = await Promise.all([read("map"), read("objects"), read("tokens"), read("groups"), read("initiative"), read("mapimg"), read(`scenes/${id}`)]);
-    const data = { map: map || {}, objects: objects || {}, tokens: tokens || {}, groups: groups || {}, initiative: initiative || null, mapimg: mapimg || null };   // map holds every floor; mapimg is the picture of each floor
-    if (old?.data?.atmosphere) data.atmosphere = old.data.atmosphere;
-    await put(`scenes/${id}`, { name, ts: Date.now(), data });
-    await put("scene", { id, name });
-    saveWin.hide(); input.value = ""; toast(`Saved scene: ${name}`);
+    try {
+      const data = await snapshot();
+      await keepInLibrary(name, data);
+      await put("scene", { id: sceneId(name), name });
+      const file = await download("scene", name, data);
+      saveWin.hide(); input.value = ""; toast(`Saved ${file}, also under Load > Scene`);
+    } catch (err) { console.warn("Scene not saved", err); toast(`Not saved: ${err.message}`); }
   });
   form.querySelector("[data-cancel]").addEventListener("click", () => saveWin.hide());
   return saveWin;
@@ -84,11 +116,8 @@ async function openLoad(anchor) {
 // New Scene: the current one is kept as "Before new scene <time>" (so Load brings it back), then everything starts empty.
 function openNew(anchor) {
   dropMenu(anchor, [["Start a new empty scene?", null], ["Yes, new scene (current one is saved first)", async () => {
-    const [map, objects, tokens, groups, initiative, mapimg] = await Promise.all(["map", "objects", "tokens", "groups", "initiative", "mapimg"].map((p) => read(p)));
-    if (Object.keys(map?.walls || {}).length || Object.keys(map?.floors || {}).length || Object.keys(objects || {}).length || Object.keys(tokens || {}).length) {
-      const name = `Before new scene ${new Date().toLocaleString()}`;
-      await put(`scenes/${sceneId(name)}`, { name, ts: Date.now(), data: { map: map || {}, objects: objects || {}, tokens: tokens || {}, groups: groups || {}, initiative: initiative || null, mapimg: mapimg || null } });
-    }
+    const data = await snapshot(), { map, objects, tokens } = data;
+    if (Object.keys(map?.walls || {}).length || Object.keys(map?.floors || {}).length || Object.keys(objects || {}).length || Object.keys(tokens || {}).length) await keepInLibrary(`Before new scene ${new Date().toLocaleString()}`, data);
     await Promise.all(["map", "objects", "tokens", "groups", "initiative", "mapimg", "scene"].map((p) => put(p, null)));
     await put("seeded", true); toast("New scene");
   }], ["Cancel", null]]);
@@ -106,6 +135,6 @@ export function initScenes() {
   add("New blank scene", '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 7v10M7 12h10"/>', openNew);
   add("Load", '<path d="M3 8V4h7l2 3h9v3M3 8h18l-3 12H3Z"/>', (b) => dropMenu(b, [["Battlemap", async () => (await maps()).loadLibraryMap(b)], ["Scene", () => openLoad(b)]]));
   add("Import", '<path d="M12 3v12m-5-5 5 5 5-5M3 15v6h18v-6"/>', (b) => dropMenu(b, [["Battlemap", async () => (await maps()).importMapFile()], ["Scene", async () => (await maps()).importSceneFile(b)]]));
-  add("Save Map", '<path d="M3 3h15l3 3v15H3ZM7 3v6h10V3M7 21v-8h10v8M10 15h4"/>', async () => (await maps()).exportGeezMapFile().catch((e) => toast(e.message)));
+  add("Save Map", '<path d="M3 3h15l3 3v15H3ZM7 3v6h10V3M7 21v-8h10v8M10 15h4"/>', async () => { try { const snap = await snapshot(); toast(`Saved ${await download("map", (await read("scene/name")) || "map", snap)}`); } catch (e) { console.warn("Map not saved", e); toast(`Not saved: ${e.message}`); } });
   add("Save Scene", '<path d="M3 3h15l3 3v15H3ZM7 3v6h10V3M7 21v-8h10v8M10 15l4 3m0-3-4 3"/>', openSave);
 }

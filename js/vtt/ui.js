@@ -88,6 +88,7 @@ const ICONS = {
   rollcall: '<path d="M3 10v4h4l9 5V5l-9 5Zm16-1a4 4 0 0 1 0 6M7 14v5h3v-4"/>',
   token: '<path d="M12 3a4 4 0 1 1 0 8 4 4 0 0 1 0-8ZM4 21v-3a8 8 0 0 1 16 0v3Z"/>',
   me: '<path d="M12 3a4 4 0 1 1 0 8 4 4 0 0 1 0-8ZM4 21v-3a8 8 0 0 1 16 0v3Z"/>',
+  fp: '<path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>',
   top: '<path d="m12 3 9 5-9 5-9-5Zm-9 10 9 5 9-5"/>',
   fit: '<path d="M4 9V4h5m6 0h5v5m0 6v5h-5m-6 0H4v-5"/>',
   grid: '<path d="M3 3h18v18H3ZM3 9h18M3 15h18M9 3v18M15 3v18"/>',

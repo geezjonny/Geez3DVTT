@@ -2,6 +2,27 @@
 
 What changed in Geez3DVTT, newest first.
 
+## 2026-11-27
+
+### Player view
+- **First person:** the eye button on the player page. Drag to look around, walk with WASD, turn with the arrows.
+  Floors above are ceilings; where there is none you see higher floors and a sky that follows the time of day.
+- **The view stays centred on your token** as it moves, keeping your zoom and angle.
+- **View sheet is back** on a character's right-click menu, opening the companion in a floating window.
+- Players can no longer use levers, buttons, dials or doors through walls, closed doors or floors.
+
+### Building
+- **Cut picture** (Floors window) removes squares from a floor's map picture so the floor below shows through; Restore
+  puts them back.
+- **A new wall replaces doors and windows under it, and a new door or window cuts the wall,** including on imported maps.
+- **Duplicate** on the right-click menu of tokens, doors, lights, traps and props.
+- **Drag props, levers and traps** to new squares.
+- **The GM can switch a light on or off** by clicking it or from its right-click menu.
+
+### Saving
+- **Save Map** writes a `.geezmap` with everything except tokens and initiative; **Save Scene** writes a `.geezscene`
+  with them too. Import loads either one exactly, keeping a copy of the table it replaces.
+
 ## 2026-11-26
 
 ### Rolls and players

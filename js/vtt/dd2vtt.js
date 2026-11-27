@@ -219,22 +219,16 @@ export async function exportDD2VTT() {
   return new Blob([JSON.stringify({ format: 0.3, resolution: { map_origin: { x: 0, y: 0 }, map_size: { x: cols, y: rows }, pixels_per_grid: 70 }, line_of_sight: walls, objects_line_of_sight: [], portals: doors, lights, image: "" })], { type: "application/json" });
 }
 
-// Export the whole scene (every floor, materials, props, roofs, atmosphere) as .geezmap.json, which is also a valid .dd2vtt.
-export async function exportGeezMapFile() {
-  const [{ S }, { exportGeezMap }, store] = await Promise.all([import("./state.js"), import("./geezmap-export.js"), import("../store.js")]);
-  const [light, atmosphere] = await Promise.all([store.read("map/light"), store.read("atmosphere")]);
-  const name = S?.sceneName || S?.map?.name || "map";
-  const json = exportGeezMap({ name, map: { ...S.map, light }, objects: S.objects, atmosphere });
-  const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([JSON.stringify(json)], { type: "application/json" }));
-  a.download = `${name.replace(/[\\/:*?"<>|]+/g, "_")}.geezmap.json`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-  toast(`Exported ${a.download}`);
-}
-
 // The Scene Controls' map buttons (scenes.js).
 const pickFile = (accept, use) => { const input = Object.assign(document.createElement("input"), { type: "file", accept }); input.addEventListener("change", () => { const f = input.files[0]; if (f) use(f); }); input.click(); };
 export async function loadLibraryMap(button) {
   const { libraryMaps } = await import("./mapimg.js"), { dropMenu } = await import("./ui.js"), list = await libraryMaps();
   dropMenu(button, list.length ? list.map((m) => [`${m.name} (${(m.bytes / 1048576).toFixed(1)} MB)`, () => importWithChoice(m.name, async () => parseDD2VTT(await (await fetch(geezMapUrl(m.file))).json()), "battlemap/" + m.file)]) : [["No battlemap/index.json", null]]);
 }
-export const importMapFile = () => pickFile(".dd2vtt,.json,.uvtt", (f) => importWithChoice(f.name, async () => parseDD2VTT(JSON.parse(await f.text()))));
-export const importSceneFile = (button) => pickFile(".json", (f) => importGeezChoice(f, button));
+// Our own saves (.geezmap, .geezscene) load exactly, from either Import button; anything else goes to its importer.
+const ours = (accept, otherwise) => pickFile(accept, async (f) => {
+  try { const { restoreFile } = await import("./scenes.js"); if (!(await restoreFile(JSON.parse(await f.text())))) await otherwise(f); }
+  catch (e) { toast(e.message); }
+});
+export const importMapFile = () => ours(".geezmap,.geezscene,.dd2vtt,.json,.uvtt", (f) => importWithChoice(f.name, async () => parseDD2VTT(JSON.parse(await f.text()))));
+export const importSceneFile = (button) => ours(".geezscene,.geezmap,.json", (f) => importGeezChoice(f, button));
