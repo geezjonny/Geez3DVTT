@@ -87,6 +87,7 @@ const ICONS = {
   dice: '<rect x="3" y="3" width="18" height="18" rx="3"/><path stroke-linecap="round" stroke-width="3" d="M8 8h0m8 0h0m-4 4h0m-4 4h0m8 0h0"/>',
   rollcall: '<path d="M3 10v4h4l9 5V5l-9 5Zm16-1a4 4 0 0 1 0 6M7 14v5h3v-4"/>',
   token: '<path d="M12 3a4 4 0 1 1 0 8 4 4 0 0 1 0-8ZM4 21v-3a8 8 0 0 1 16 0v3Z"/>',
+  stealth: '<path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12Zm2 9L20 3"/>',
   loot: '<path d="M3 10a5 5 0 0 1 5-5h8a5 5 0 0 1 5 5v9H3Zm0 2h18m-9-2v5"/>',
   me: '<path d="M12 3a4 4 0 1 1 0 8 4 4 0 0 1 0-8ZM4 21v-3a8 8 0 0 1 16 0v3Z"/>',
   fp: '<path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>',

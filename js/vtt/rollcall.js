@@ -33,7 +33,7 @@ const statOf = (c, ab) => c?.stats?.[ab] ?? c?.abilities?.[ab]?.score ?? 10;
 const uid = () => { const a = new Uint32Array(2); crypto.getRandomValues(a); return `${Date.now().toString(36)}-${a[0].toString(36)}${a[1].toString(36)}`; };
 
 // Modifier from the character sheet, with a breakdown: { mod, parts: [[label, n]] }
-function callMod(c, call, effects) {
+export function callMod(c, call, effects) {
   const prof = Number(c?.combat?.proficiency_bonus) || 2, parts = [];
   if (call.kind === "init") {
     const ib = c?.combat?.initiative_bonus;

@@ -49,6 +49,8 @@ import { renderPanel, openLogic } from "./panel.js";
 import { initAttack, attackOptions, beginAttack, sheetOf } from "./attack.js";
 import { initJoin } from "./join.js";
 import { initLoot } from "./loot.js";
+import { initStealth } from "./stealth.js";
+import { FACE } from "./stealth-rules.js";
 import { initTable } from "./table.js";
 import { EFFECT_PRESETS, effectsOf, effectRemaining, makeEffect, damageAdjustment } from "./effects.js";
 import { initExplored } from "./explored-vtt.js";
@@ -292,6 +294,17 @@ async function buildTokenMenu(menu, id, done, alive) {
   if (S.isGM) {   // hold a torch: lights the area around the token and clears fog as it moves
     const lb = document.createElement("button"); lb.textContent = t.torch ? "Light: put out torch" : "Light: hold torch";
     lb.addEventListener("click", () => { done(); put(`tokens/${id}/torch`, t.torch ? null : true); }); menu.append(lb);
+  }
+  if (S.isGM && !t.pc) {   // the guard tag: used while stealth mode is on
+    const act = (text, changes) => { const b = document.createElement("button"); b.textContent = text; b.addEventListener("click", () => { done(); patch(Object.fromEntries(Object.entries(changes).map(([k, v]) => [`tokens/${id}/${k}`, v]))); }); menu.append(b); };
+    act(t.guard ? "Remove guard tag" : "Tag as guard", t.guard ? { guard: null, mood: null, ...(t.spotted ? { spotted: null, frozen: null } : {}) } : { guard: true });
+    if (t.guard) {
+      const route = Object.values(t.patrol || {});
+      for (const [text, turn] of [["Turn guard left", -45], ["Turn guard right", 45]]) act(text, { face: ((t.face ?? FACE) + turn + 360) % 360 });
+      act(`Add patrol point here (${route.length})`, { patrol: [...route, [t.x, t.y]] });
+      if (route.length) act("Clear patrol", { patrol: null });
+      act(t.sweep ? "Stop sweeping" : "Sweep side to side", { sweep: t.sweep ? null : true });
+    }
   }
   if (S.isGM) { const pb = document.createElement("button"); pb.textContent = "Picture…"; pb.addEventListener("click", () => { done(); openTokenPicker(id); }); menu.append(pb); }
   if (S.isGM) {
@@ -596,6 +609,7 @@ function useObject(id) {
 }
 
 if (S.isGM) initLoot({ loadPcs });
+initStealth({ myToken: () => (S.isGM ? null : myTokenId()), toast });
 
 // Who this player is: kept in the browser, so walking, floors and roll call follow that character.
 const setMe = (v) => { me = v; try { localStorage.setItem("vtt-me", JSON.stringify(v)); } catch { /* fine */ } const l = document.querySelector("#bar-me .lbl"); if (l) l.textContent = v ? v.name.slice(0, 8) : "Me"; dispatchEvent(new Event("vtt-me-changed")); };

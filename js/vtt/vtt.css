@@ -22,7 +22,7 @@ input[type="color"] { width: 2rem; height: 1.5rem; padding: 1px; }
 summary { cursor: pointer; }
 
 /* panels: every floating surface */
-.fwin, #tokmenu, .dropmenu, #toast, #paused-banner, .v3-opts, #atk-hint, #atk-card, #measure-tip, #panel { background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: .35rem; box-shadow: 0 10px 30px #0009; font-size: .75rem; }
+.fwin, #tokmenu, .dropmenu, #toast, #paused-banner, #stealth-badge, .v3-opts, #atk-hint, #atk-card, #measure-tip, #panel { background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: .35rem; box-shadow: 0 10px 30px #0009; font-size: .75rem; }
 .fwin { position: fixed; z-index: 7; display: flex; flex-direction: column; min-width: 5rem; min-height: 1.5rem; max-width: 96vw; max-height: 96vh; resize: both; overflow: hidden; }
 .fwin.drag { opacity: .9; }
 .fwin-bar { display: flex; align-items: center; gap: .4rem; padding: .1rem .375rem; background: var(--control); border-radius: .3rem .3rem 0 0; cursor: move; user-select: none; touch-action: none; }
@@ -45,6 +45,8 @@ summary { cursor: pointer; }
 #tokmenu details { padding: 0 .5rem; } #tokmenu .cond { justify-content: flex-start; padding: .05rem 0; }
 #tokmenu .cond i { width: .8rem; height: .8rem; border-radius: 50%; border: 1px solid #0006; }
 #toast { position: fixed; top: 1rem; left: 50%; transform: translateX(-50%); z-index: 30; display: none; padding: .5rem 1rem; }
+#stealth-badge { position: fixed; z-index: 20; top: 4.5rem; left: 50%; transform: translateX(-50%); padding: .35rem .6rem; display: flex; gap: .5rem; align-items: center; white-space: nowrap; }
+#stealth-badge.seen { border-color: #ff6b60; color: #ffb3ad; }
 #paused-banner { position: fixed; z-index: 20; top: 1rem; left: 50%; transform: translateX(-50%); padding: .35rem .8rem; }
 
 /* toolbars */

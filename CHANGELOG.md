@@ -4,6 +4,13 @@ What changed in Geez3DVTT, newest first.
 
 ## 2026-11-27
 
+### Stealth (optional)
+- **Stealth mode** is a GM switch (crossed-out eye in VTT Controls); nothing changes while it is off.
+- Right-click an NPC token and **Tag as guard**. Guards patrol points you set, sweep, open unlocked doors, see in a
+  cone that walls block (shorter in the dark), and walk over to footsteps they hear.
+- A seen character and the guard both stop; you rule **Not seen**, **Investigate** or **Keep stopped**.
+- Players **sneak** (C: slower, quieter, rolls Stealth) and **listen** (Q: rolls Perception, rings show guards heard).
+
 ### Loot, traps and effects
 - **Loot** (chest icon on `gm.html`): roll coins and items by tier, then give them to a character's sheet.
 - **Every trap and trigger has its own low-poly model** that shows its state, instead of a symbol on the floor. The GM

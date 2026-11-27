@@ -5,6 +5,7 @@ import { patch } from "../store.js";
 import { S, mapSize } from "./state.js";
 import { solidSegments } from "./reach.js";
 import { moveCircle, exitAt, leadsTo } from "./movement.js";
+import { SNEAK_PACE } from "./stealth-rules.js";
 
 export const SPEED = 4 * 40, RADIUS = 12;   // px: 4 squares a second, a token 0.6 of a square wide
 const SEND_EVERY = 90;
@@ -49,7 +50,8 @@ export function initWalk({ myToken, onStart, onStop }) {
     let jumped = false;
     if (dir) {
       const { cols, rows, x, y } = mapSize();
-      moveCircle(me, dir.x * SPEED * dt, dir.y * SPEED * dt, RADIUS, solidSegments(me.lv), (x + cols) * 40, (y + rows) * 40, x * 40, y * 40);
+      const pace = S.stealth && t.sneak ? SPEED * SNEAK_PACE : SPEED;
+      moveCircle(me, dir.x * pace * dt, dir.y * pace * dt, RADIUS, solidSegments(me.lv), (x + cols) * 40, (y + rows) * 40, x * 40, y * 40);
       const exit = exitAt(S.map.props, me, me.lv);
       if (exit !== me.exit) {
         me.exit = exit;

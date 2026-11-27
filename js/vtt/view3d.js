@@ -823,7 +823,7 @@ function buildToken(id, t, i) {
     const part = clamp(hp.hp / (hp.max || 1), 0, 1);
     tag(flat(canvasTexture(128, 28, (c) => { c.fillStyle = "#000c"; c.fillRect(0, 0, 128, 28); c.fillStyle = part <= 0.25 ? "#c02a22" : part <= 0.5 ? "#c8780a" : "#2a9440"; c.fillRect(2, 2, 124 * part, 24); c.fillStyle = "#fff"; c.font = "700 20px system-ui"; c.textAlign = "center"; c.textBaseline = "middle"; c.fillText(`${hp.hp}/${hp.max}`, 64, 15); }), 0.62, 0.136), 0.02);
   }
-  const words = [t.label || "", ...conditionsOf(t).map((c) => CONDITIONS[c]?.[0]).filter(Boolean)].filter(Boolean).join(" · ");
+  const words = [t.label || "", S.isGM && t.guard ? "Guard" : "", ...conditionsOf(t).map((c) => CONDITIONS[c]?.[0]).filter(Boolean)].filter(Boolean).join(" · ");
   if (words) { const label = sprite(words, { size: 0.22 }); label.material.depthTest = !!fp || !here(t); label.renderOrder = 12; g.add(label); tag(label, hp ? 0.18 : 0.02); }
   g.scale.setScalar(Number(t.size) || 1);
   g.position.set(t.x / U, 0, t.y / U);
@@ -848,7 +848,7 @@ function syncTokens() {
     if (!here(t) && !S.isGM) return; // other floors: only the GM sees who is there
     if (!S.isGM && !own && (!seenByRules(t) || (S.map.exploredEnabled !== false && !isCurrentlyVisible(t.x, t.y)))) return;
     seen.add(id);
-    const sig = JSON.stringify([t.img, t.label, t.color, t.hidden, t.size, here(t), conditionsOf(t), S.turn === id, hpOf(id, t), t.pc, !!fp]);
+    const sig = JSON.stringify([t.img, t.label, t.guard, t.color, t.hidden, t.size, here(t), conditionsOf(t), S.turn === id, hpOf(id, t), t.pc, !!fp]);
     let e = tokens.get(id);
     if (!e || e.sig !== sig) { const old = e?.group.position.clone(); if (e) { tokenRoot.remove(e.group); disposeTree(e.group); } e = buildToken(id, t, i); e.sig = sig; if (old) e.group.position.copy(old); dirty = true; }
     const base = (lvOf(t) - nowLv()) * floorGap();
@@ -861,6 +861,22 @@ function syncTokens() {
 
 /* ---------------- camera ---------------- */
 // whose token this screen walks (players): the view centres on it, and again whenever it moves
+const coneRoot = new THREE.Group(); scene.add(coneRoot);
+// Stealth mode: each guard's view cone as a flat fan on this floor (hidden by fog like everything else), plus rings
+// for the GM's patrol points and the footsteps a player hears (those show through fog).
+export function setStealth(cones, marks = []) {
+  disposeTree(coneRoot); coneRoot.clear();
+  for (const { points, alert, searching } of cones) {
+    const [from, ...edge] = points.map(([x, y]) => [x / U, 0.04, y / U]), tris = edge.slice(1).flatMap((p, i) => [from, edge[i], p]).flat();
+    const geo = new THREE.BufferGeometry(); geo.setAttribute("position", new THREE.Float32BufferAttribute(tris, 3));
+    coneRoot.add(new THREE.Mesh(geo, fogged(new THREE.MeshBasicMaterial({ color: alert ? 0xff3b30 : searching ? 0xff8a20 : 0xffd23f, transparent: true, opacity: alert ? 0.4 : 0.24, depthWrite: false, side: THREE.DoubleSide }))));
+  }
+  for (const { x, y, color } of marks) {
+    const ring = new THREE.Mesh(new THREE.RingGeometry(0.18, 0.28, 16).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.85, depthTest: false }));
+    ring.position.set(x / U, 0.06, y / U); ring.renderOrder = 20; ring.raycast = () => {}; coneRoot.add(ring);
+  }
+  dirty = true;
+}
 export function setWalker(id) { if (walkingId !== id) { walkingId = id; framedFor = ""; pending = true; } }
 function frameMap() {
   const { cols, rows, x: x0, y: y0 } = mapSize(), lead = !S.isGM && walkingId && S.tokens[walkingId];
