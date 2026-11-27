@@ -48,6 +48,7 @@ import { initTools, setTool, duplicate, snapFor, toolDown, toolMove, toolUp, roo
 import { renderPanel, openLogic } from "./panel.js";
 import { initAttack, attackOptions, beginAttack, sheetOf } from "./attack.js";
 import { initJoin } from "./join.js";
+import { initLoot } from "./loot.js";
 import { initTable } from "./table.js";
 import { EFFECT_PRESETS, effectsOf, effectRemaining, makeEffect, damageAdjustment } from "./effects.js";
 import { initExplored } from "./explored-vtt.js";
@@ -359,7 +360,7 @@ map.addEventListener("contextmenu", (e) => {
   }
   if (propEl) {
     const id = propEl.dataset.id, a = S.map.props[id]; if (!a) return; e.preventDefault();
-    return showActionMenu(e, a.kind, [["Replace all like this...", () => openReplace({ category: "prop", from: a.kind })], ...lightItem(id, a), [a.hidden ? "Reveal to players" : "Hide from players", () => put(`map/props/${id}/hidden`, a.hidden ? null : true)], ["Duplicate", () => duplicate("prop", id)], ["Delete", () => put(`map/props/${id}`, null)]], settingsFor("prop", id).fields);
+    return showActionMenu(e, a.kind, [["Replace all like this...", () => openReplace({ category: "prop", from: a.kind })], ...lightItem(id, a), ...fxItems(id, a), [a.hidden ? "Reveal to players" : "Hide from players", () => put(`map/props/${id}/hidden`, a.hidden ? null : true)], ["Duplicate", () => duplicate("prop", id)], ["Delete", () => put(`map/props/${id}`, null)]], settingsFor("prop", id).fields);
   }
   const labelEl = e.target.closest(".map-label");
   if (labelEl) { const id = labelEl.dataset.id, a = S.map.labels?.[id]; if (!a) return; e.preventDefault(); return showActionMenu(e, a.text || "Label", [["Delete", () => put(`map/labels/${id}`, null)]], settingsFor("label", id).fields); }
@@ -412,6 +413,8 @@ async function openNpcWindow(tid) {
 const DOES = { light: "Toggle light", vis: "Toggle visibility", lock: "Toggle lock", open: "Toggle open", activate: "Toggle activate" };
 const glows = (prop) => !!propParts(prop.kind)?.some((p) => p.glow);
 const lightItem = (id, p) => (glows(p) ? [[p.off ? "Turn light on" : "Turn light off", () => put(`map/props/${id}/off`, !p.off)]] : []);
+const FX = { glow: "glow", ablaze: "fire", fairy: "fairy particles" };
+const fxItems = (id, p) => Object.entries(FX).map(([k, name]) => [`${p.fx?.[k] ? "Remove" : "Add"} ${name}`, () => put(`map/props/${id}/fx/${k}`, p.fx?.[k] ? null : true)]);
 const wallItem = (id) => [S.map.walls[id]?.hidden ? "Show wall" : "Hide wall", () => put(`map/walls/${id}/hidden`, !S.map.walls[id]?.hidden)];
 function linkTarget(id) {
   const o = S.objects[id]; if (o) return { o, type: "object", name: o.label || KINDS[o.kind]?.label || id };
@@ -539,7 +542,7 @@ function open3dMenu(e, hit) {
   if (type === "token") return showTokenMenu(e, id);
   if (!S.isGM) return type === "object" && interactMenu(e, id);
   if (type === "object") { const o = S.objects[id]; if (o) showActionMenu(e, o.label || o.kind, [...(o.kind === "door" ? [[o.state === "open" ? "Close" : "Open", () => put(`objects/${id}/state`, o.state === "open" ? "closed" : "open")], [o.locked ? "Unlock" : "Lock", () => put(`objects/${id}/locked`, o.locked ? null : true)]] : []), ...(o.kind === "light" ? [[o.state === "on" ? "Turn light off" : "Turn light on", () => useObject(id)]] : []), ...(o.kind !== "door" && o.kind !== "light" ? [["Logic", () => openLogic(id)]] : []), [o.hidden ? "Reveal to players" : "Hide from players", () => put(`objects/${id}/hidden`, !o.hidden)], ["Duplicate", () => duplicate("object", id)], ["Delete", () => put(`objects/${id}`, null)]], settingsFor("object", id).fields, (m) => linkMenu(m, id)); }
-  else if (type === "prop") { const a = S.map.props[id]; if (a) showActionMenu(e, a.kind, [...lightItem(id, a), [a.hidden ? "Reveal to players" : "Hide from players", () => put(`map/props/${id}/hidden`, a.hidden ? null : true)], ["Duplicate", () => duplicate("prop", id)], ["Delete", () => put(`map/props/${id}`, null)]], settingsFor("prop", id).fields); }
+  else if (type === "prop") { const a = S.map.props[id]; if (a) showActionMenu(e, a.kind, [...lightItem(id, a), ...fxItems(id, a), [a.hidden ? "Reveal to players" : "Hide from players", () => put(`map/props/${id}/hidden`, a.hidden ? null : true)], ["Duplicate", () => duplicate("prop", id)], ["Delete", () => put(`map/props/${id}`, null)]], settingsFor("prop", id).fields); }
   else if (type === "wall") showActionMenu(e, "Wall", [wallItem(id), ["Delete", () => put(`map/walls/${id}`, null)]], settingsFor("wall", id).fields);
 }
 const toast = (text) => { const t = $("#toast"); t.textContent = text; t.style.display = "block"; setTimeout(() => (t.style.display = "none"), 3000); };
@@ -591,6 +594,8 @@ function useObject(id) {
   document.addEventListener("pointermove", (e) => { const p = floorUnder(e); if (p) toolMove(e, p); });
   document.addEventListener("pointerup", (e) => { if (e.button === 0 && floorUnder(e)) toolUp(); });
 }
+
+if (S.isGM) initLoot({ loadPcs });
 
 // Who this player is: kept in the browser, so walking, floors and roll call follow that character.
 const setMe = (v) => { me = v; try { localStorage.setItem("vtt-me", JSON.stringify(v)); } catch { /* fine */ } const l = document.querySelector("#bar-me .lbl"); if (l) l.textContent = v ? v.name.slice(0, 8) : "Me"; dispatchEvent(new Event("vtt-me-changed")); };

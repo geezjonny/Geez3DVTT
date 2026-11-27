@@ -14,7 +14,7 @@ import { getRefImage } from "./refimage.js";
 import { doorSeg } from "./reach.js";
 import { CONDITIONS, conditionsOf } from "./conditions.js";
 import { propParts } from "./propmodels.js";
-import { SOURCES } from "../puzzle/objects.js";
+import { SOURCES, statesOf, startOf } from "../puzzle/objects.js";
 
 const U = 40, THICK = 0.22, clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const stored = (k, d) => { try { return localStorage.getItem("geez3d." + k) ?? d; } catch { return d; } };
@@ -100,17 +100,17 @@ function fogged(material, flicker = false) {
   material.customProgramCacheKey = () => "geez-fogged" + flicker;
   return material;
 }
-const emberMaterial = () => new THREE.ShaderMaterial({
+const emberMaterial = (colour = "1.0, 0.25 + 0.45 * vLife, 0.05", spread = "0.18", dot = "0.045", max = "5.0") => new THREE.ShaderMaterial({
   uniforms: { uTime: U3.uTime, uPx: U3.uPx, uFog: U3.uFog, uSize: U3.uSize, uOrigin: U3.uOrigin }, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
   vertexShader: `attribute float seed; uniform float uTime, uPx; uniform sampler2D uFog; uniform vec2 uSize, uOrigin; varying float vLife;
     void main() {
       float t = fract(uTime * (0.35 + fract(seed * 7.3) * 0.3) + seed);
-      vec3 p = position + vec3(sin(seed * 40.0 + uTime * 2.0) * 0.18 * t, t * 0.9, cos(seed * 23.0 + uTime * 1.7) * 0.18 * t);
+      vec3 p = position + vec3(sin(seed * 40.0 + uTime * 2.0) * ${spread} * t, t * 0.9, cos(seed * 23.0 + uTime * 1.7) * ${spread} * t);
       vec4 mv = modelViewMatrix * vec4(p, 1.0);
-      gl_Position = projectionMatrix * mv; gl_PointSize = clamp(uPx * 0.045 / -mv.z, 1.0, 5.0);
+      gl_Position = projectionMatrix * mv; gl_PointSize = clamp(uPx * ${dot} / -mv.z, 1.0, ${max});
       vLife = (1.0 - t) * step(0.8, texture2D(uFog, (position.xz - uOrigin) / uSize).r);
     }`,
-  fragmentShader: `varying float vLife; void main() { gl_FragColor = vec4(1.0, 0.25 + 0.45 * vLife, 0.05, vLife); }`
+  fragmentShader: `varying float vLife; void main() { gl_FragColor = vec4(${colour}, vLife); }`
 });
 
 /* ---------------- scene, renderer, camera ---------------- */
@@ -501,6 +501,36 @@ function fire(hex) { // warm and white lights burn like fire; blue and green one
   return c;
 }
 let glowTex = null;
+function halos(pos, col, size, opacity) {
+  glowTex ||= canvasTexture(64, 64, (g) => { const r = g.createRadialGradient(32, 32, 0, 32, 32, 32); r.addColorStop(0, "rgba(255,255,255,0.9)"); r.addColorStop(0.3, "rgba(255,255,255,0.3)"); r.addColorStop(1, "rgba(255,255,255,0)"); g.fillStyle = r; g.fillRect(0, 0, 64, 64); });
+  const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute("color", new THREE.Float32BufferAttribute(col, 3));
+  world.add(new THREE.Points(g, fogged(new THREE.PointsMaterial({ map: glowTex, size, vertexColors: true, transparent: true, opacity, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }))));
+}
+// Effects the GM puts on a prop (p.fx): glow, ablaze, fairy particles. A few shared draws for the whole floor.
+let fxLive = false; // something is animating
+function buildPropFx(list) {
+  const flames = [], glow = { pos: [], col: [] }, fire = { pos: [], col: [] }, embers = [], fairies = [], rnd = random(11);
+  const halo = (into, x, y, z, hex) => { const c = new THREE.Color(hex); into.pos.push(x, y, z); into.col.push(c.r, c.g, c.b); };
+  for (const p of list) {
+    const x = p.x / U, z = p.y / U, y = p.elevation || 0, s = p.s || 1;
+    if (p.fx.glow) halo(glow, x, y + 0.9 * s, z, 0x7fc8ff);
+    if (p.fx.ablaze) {
+      for (let i = 0; i < 7; i++) { const a = i * 1.26, top = i > 4, r = (top ? 0.14 : 0.46) * s, size = s * (1.5 + rnd()); flames.push({ m: matrix(x + Math.cos(a) * r, y + (top ? 0.85 : 0.15 + rnd() * 0.25) * s, z + Math.sin(a) * r, a, size, size, size), c: new THREE.Color(i % 2 ? 0xffc040 : 0xff6a1a) }); }
+      halo(fire, x, y + 0.8 * s, z, 0xff7a20);
+      for (let i = 0; i < 12; i++) embers.push(x + (rnd() - 0.5) * 0.7 * s, y + 0.8 * s, z + (rnd() - 0.5) * 0.7 * s);
+    }
+    if (p.fx.fairy) for (let i = 0; i < 22; i++) fairies.push(x + (rnd() - 0.5) * 1.1 * s, y + rnd() * 0.8 * s, z + (rnd() - 0.5) * 1.1 * s);
+  }
+  instances(new THREE.OctahedronGeometry(0.09).scale(1, 1.8, 1), fogged(new THREE.MeshBasicMaterial(), Q.flicker), flames, { shadows: false });
+  if (glow.pos.length) halos(glow.pos, glow.col, 3.2, 1);
+  if (fire.pos.length) halos(fire.pos, fire.col, 2.6, 0.9);
+  for (const [pos, material] of [[embers, () => emberMaterial()], [fairies, () => emberMaterial("0.6 + 0.4 * vLife, 1.0, 0.75", "0.45", "0.1", "11.0")]]) {
+    if (!pos.length) continue;
+    const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute("seed", new THREE.Float32BufferAttribute(Array.from({ length: pos.length / 3 }, () => rnd()), 1));
+    const points = new THREE.Points(g, material()); points.frustumCulled = false; world.add(points);
+  }
+  fxLive = !!(flames.length || fairies.length);
+}
 function buildFixtures(H) {
   const sconces = [], braziers = [], flames = [], glowPos = [], glowCol = [];
   for (const l of data.lights) {
@@ -525,9 +555,7 @@ function buildFixtures(H) {
   instances(new THREE.OctahedronGeometry(0.09).scale(1, 1.8, 1), fogged(new THREE.MeshBasicMaterial(), Q.flicker), flames, { shadows: false });
   if (!glowPos.length) return;
   if (Q.glow) {
-    glowTex ||= canvasTexture(64, 64, (g) => { const r = g.createRadialGradient(32, 32, 0, 32, 32, 32); r.addColorStop(0, "rgba(255,255,255,0.9)"); r.addColorStop(0.3, "rgba(255,255,255,0.3)"); r.addColorStop(1, "rgba(255,255,255,0)"); g.fillStyle = r; g.fillRect(0, 0, 64, 64); });
-    const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.Float32BufferAttribute(glowPos, 3)); g.setAttribute("color", new THREE.Float32BufferAttribute(glowCol, 3));
-    world.add(new THREE.Points(g, fogged(new THREE.PointsMaterial({ map: glowTex, size: 1.5, vertexColors: true, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }))));
+    halos(glowPos, glowCol, 1.5, 0.5);
   }
   if (Q.flicker) {
     const rnd = random(3), from = [], seed = [];
@@ -537,24 +565,20 @@ function buildFixtures(H) {
   }
 }
 
-/* Traps and triggers: a rune on the floor for anything that is not a door or a light. */
-const RUNES = { sight: ["◉", "#b06adf"], gauge: ["♥", "#d04a5a"], dial: ["✥", "#6aa8d0"], floor: ["▦", "#a08a70"], spawn: ["☠", "#d04a4a"], stone: ["●", "#9a948a"], catapult: ["➶", "#d0904a"], initiative: ["⚔", "#e0c060"] };
-function triggerModel(o, g) { // levers, buttons, plates and tripwires are real pieces that show their state
-  const name = o.kind === "switch" ? (o.state === "on" ? "lever_on" : "lever") : o.kind === "plate" ? (o.state === "down" ? "plate_down" : "plate") : o.kind === "tripwire" ? `${o.state === "tripped" ? "tripwire_down" : "tripwire"}:${o.len || 3}` : "button";
-  const piece = new THREE.Group(); piece.position.set(o.x / U, 0, o.y / U); piece.rotation.y = o.kind === "tripwire" ? (o.dir === "v" ? -Math.PI / 2 : 0) : -(o.rot || 0) * Math.PI / 180; g.add(piece);
-  for (const [geo, m] of kit(name)) { const mesh = new THREE.Mesh(geo, m); mesh.castShadow = mesh.receiveShadow = m === solidMat; piece.add(mesh); }
+/* Traps and triggers: real pieces that show their state. The GM sees hidden ones faded. */
+function modelName(o) {
+  if (o.kind === "switch") return o.state === "on" ? "lever_on" : "lever";
+  if (o.kind === "plate") return o.state === "down" ? "plate_down" : "plate";
+  if (o.kind === "tripwire") return `${o.state === "tripped" ? "tripwire_down" : "tripwire"}:${o.len || 3}`;
+  if (o.kind === "button") return "button";
+  const n = ["dial", "gauge"].includes(o.kind) ? Math.max(0, statesOf(o).indexOf(o.state)) : Number(o.state !== startOf(o));
+  return `trap_${o.kind}:${n}`;
 }
-function rune(id, o) {
-  const [icon, color] = RUNES[o.kind] || ["?", "#c9a45c"], on = o.state !== (o.start ?? o.state), g = new THREE.Group();
-  g.userData.pick = { type: "object", id };
-  const cells = SOURCES.includes(o.kind) ? 0 : 1;
-  if (!cells) triggerModel(o, g);
-  for (let i = 0; i < cells; i++) {
-    const tex = canvasTexture(96, 96, (c) => { c.strokeStyle = color; c.lineWidth = 5; c.globalAlpha = o.hidden ? 0.5 : 1; if (o.hidden) c.setLineDash([10, 8]); c.fillStyle = on ? color + "66" : "#00000066"; c.beginPath(); c.roundRect(8, 8, 80, 80, 14); c.fill(); c.stroke(); c.setLineDash([]); c.fillStyle = color; c.font = "56px system-ui"; c.textAlign = "center"; c.textBaseline = "middle"; c.fillText(icon, 48, 52); });
-    const m = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.9).rotateX(-Math.PI / 2), fogged(new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false })));
-    m.position.set(o.x / U + (o.dir === "v" ? 0 : i), 0.03, o.y / U + (o.dir === "v" ? i : 0)); g.add(m);
-  }
-  if (S.isGM) { const name = sprite(`${o.label || o.kind}: ${o.state}${o.hidden ? " (hidden)" : ""}`, { size: 0.24 }); name.position.set(o.x / U, 0.75, o.y / U); g.add(name); }
+function trap(id, o) {
+  const g = new THREE.Group(), piece = new THREE.Group(); g.userData.pick = { type: "object", id };
+  piece.position.set(o.x / U, 0, o.y / U); piece.rotation.y = o.kind === "tripwire" ? (o.dir === "v" ? -Math.PI / 2 : 0) : -(o.rot || 0) * Math.PI / 180; g.add(piece);
+  for (const [geo, m] of kit(modelName(o))) { const mesh = new THREE.Mesh(geo, o.hidden ? ghost3() : m); mesh.castShadow = mesh.receiveShadow = m === solidMat && !o.hidden; piece.add(mesh); }
+  if (S.isGM) { const name = sprite(`${o.label || o.kind}: ${o.state}${o.hidden ? " (hidden)" : ""}`, { size: 0.24 }); name.position.set(o.x / U, 1.35, o.y / U); g.add(name); }
   world.add(g);
 }
 
@@ -641,6 +665,7 @@ function buildStatic() {
   const elevation = (x, y) => Object.values(S.map.floors || {}).find((a) => here(a) && x >= a.x && x <= a.x + a.w && y >= a.y && y <= a.y + a.h)?.elev / U || 0;
   for (const [id, p] of Object.entries(S.map.props || {})) if (here(p) && canExist(p)) buildProp({ ...p, id, elevation: elevation(p.x, p.y) }, id);
   for (const [id, p] of Object.entries(S.map.props || {})) if (!here(p) && canExist(p) && ["stairs", "ladder"].includes(p.kind) && Number(p.to) === nowLv() && p.to !== "") buildProp({ ...p, id, lv: nowLv(), to: lvOf(p) }, id);
+  buildPropFx(Object.values(S.map.props || {}).filter((p) => here(p) && canExist(p) && Object.values(p.fx || {}).some(Boolean)).map((p) => ({ ...p, elevation: elevation(p.x, p.y) })));
   roofs = [];
   for (const a of Object.values(S.map.roofs || {})) {
     if (!here(a) || a.open) continue;
@@ -650,7 +675,7 @@ function buildStatic() {
     if (fp) m.material = lit(new THREE.MeshLambertMaterial({ color: m.material.color, side: THREE.DoubleSide, flatShading: true }));   // seen from inside
     roofs.push({ a, m }); world.add(m);
   }
-  for (const [id, o] of Object.entries(S.objects)) if (here(o) && canExist(o) && o.kind !== "door" && o.kind !== "light") rune(id, o);
+  for (const [id, o] of Object.entries(S.objects)) if (here(o) && canExist(o) && o.kind !== "door" && o.kind !== "light") trap(id, o);
   for (const a of Object.values(S.map.labels || {})) if (here(a) && seenByRules(a)) { const s = sprite(a.text || "", { color: a.color && a.color !== "#3d2632" ? a.color : "#e6ebf1", size: 0.45 * (a.size || 1) }); s.position.set(a.x / U, H + 0.3, a.y / U); world.add(s); }
   // invisible boxes that make walls, doors and lights easy to click
   const hits = []; hitIds = [];
@@ -666,8 +691,8 @@ function buildStatic() {
     if (!on) { const m = new THREE.Mesh(new THREE.OctahedronGeometry(0.14), new THREE.MeshBasicMaterial({ color: 0x55505c, wireframe: true })); m.position.set(o.x / U, 0.6, o.y / U); world.add(m); }
     hit("object", id, matrix(o.x / U, 0.55, o.y / U, 0, 0.55, 1, 0.55));
   }
-  for (const [id, o] of Object.entries(S.objects)) if (here(o) && canExist(o) && SOURCES.includes(o.kind)) {   // small pieces get a roomier click box
-    const n = o.kind === "tripwire" ? o.len || 3 : 1, v = o.dir === "v", wide = o.kind === "plate" ? 0.85 : 0.5, tall = o.kind === "switch" || o.kind === "button" ? 0.75 : 0.3;
+  for (const [id, o] of Object.entries(S.objects)) if (here(o) && canExist(o) && o.kind !== "door" && o.kind !== "light") {   // small pieces get a roomier click box
+    const n = o.kind === "tripwire" ? o.len || 3 : 1, v = o.dir === "v", wide = o.kind === "switch" || o.kind === "button" || o.kind === "tripwire" ? 0.5 : 0.85, tall = o.kind === "plate" || o.kind === "tripwire" ? 0.3 : 0.75;
     hit("object", id, matrix(o.x / U + (v ? 0 : (n - 1) / 2), tall / 2, o.y / U + (v ? (n - 1) / 2 : 0), 0, n > 1 && !v ? n : wide, tall, n > 1 && v ? n : wide));
   }
   hitMesh = instances(boxGeo(1, 1, 1), new THREE.MeshBasicMaterial(), hits, { shadows: false });
@@ -1032,7 +1057,7 @@ function loop(now) {
   }
   const changed = !fp && controls.update();
   syncFlat();
-  const flame = Q.flicker && data?.lights.length && now - drawn >= 32;
+  const flame = Q.flicker && (data?.lights.length || fxLive) && now - drawn >= 32;
   if (!(dirty || moving || changed || anims.size || flame)) return;
   if (choice === "auto" && level !== "low" && document.hasFocus() && now - builtAt > 2500 && gap < 1000) {
     slow = Math.max(0, slow + (gap > 100 ? 8 : gap > 36 ? 1 : -1));

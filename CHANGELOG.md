@@ -4,6 +4,12 @@ What changed in Geez3DVTT, newest first.
 
 ## 2026-11-27
 
+### Loot, traps and effects
+- **Loot** (chest icon on `gm.html`): roll coins and items by tier, then give them to a character's sheet.
+- **Every trap and trigger has its own low-poly model** that shows its state, instead of a symbol on the floor. The GM
+  sees hidden ones faded.
+- **Prop effects:** right-click a prop to add or remove glow, fire or fairy particles.
+
 ### Scenes and testing
 - The Alarus grounds scene is saved in `scene/`, ready to Import.
 - Tried at the table and working: companion rolls, roll call and first person.

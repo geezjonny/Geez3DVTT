@@ -8,7 +8,7 @@ Gaps checked against this code on 2026-11-26. Tick an item when it works and has
 - [ ] **Loot generator** for chests (four tiers).
 - [ ] **Other containers:** crates, barrels, wardrobes and the like.
 - [ ] **Rename and remove floors.**
-- [ ] **Object effects:** glow, ablaze, fairy particles.
+- [x] **Prop effects:** glow, fire, fairy particles (props only).
 - [ ] **Combat movement:** movement range on your turn, action and bonus action, end turn.
 - [ ] **Deck of Chance push and Card Creator** from the table (check first whether the GM companion covers these).
 
@@ -30,6 +30,7 @@ Gaps checked against this code on 2026-11-26. Tick an item when it works and has
 - [ ] `.dd2vtt` export
 
 ## Try at the table
+- [ ] Loot: give one roll to a character and check it shows in `companion.html`.
 - [x] A real `companion.html` roll shows on `gm.html` and `index.html`.
 - [x] Roll call reaches a companion and the result comes back, initiative included.
 - [ ] Pack items in the companion: use, send, remove (on GeezSheets branch `companion-pack-items`, **not live** until merged).

@@ -40,7 +40,31 @@ const lever = (a, knob) => [box(SLATE, 0.42, 0.14, 0.32), box(BLACK, 0.3, 0.02, 
 const plate = (h) => [box(SLATE, 0.86, 0.03, 0.86), box(STONE, 0.66, h, 0.66, 0, 0.03)];
 const tripwire = (n, y) => [box(DARK, 0.07, 0.3, 0.07, -0.45), box(DARK, 0.07, 0.3, 0.07, n - 0.55), box(STRAW, n - 0.1, 0.02, 0.02, (n - 1) / 2, y)];
 
+// Traps and triggers, one model per kind: n is 0 at the start state, 1 once used (a dial or gauge: which state it shows).
+const catapult = (fired) => {
+  const a = fired ? 0.45 : -1.15, y = 0.45 + (fired ? 0.1 : 0), z = fired ? 0.12 : -0.14, tip = [y + 0.375 * Math.cos(a), z + 0.375 * Math.sin(a)];
+  return [each([-0.26, 0.26], (x) => box(DARK, 0.09, 0.09, 0.84, x, 0.1)), each([-0.3, 0.3], (v) => box(WOOD, 0.6, 0.07, 0.08, 0, 0.12, v)),
+    each([-0.35, 0.35], (x) => each([-0.28, 0.28], (v) => cyl(BLACK, 0.13, 0.07, x, 0.095, v, 0.13, 8, ALONG_X))), each([-0.22, 0.22], (x) => box(WOOD, 0.07, 0.42, 0.07, x, 0.18, 0.05)),
+    box(IRON, 0.52, 0.07, 0.07, 0, 0.52, 0.05), box(WOOD, 0.08, 0.75, 0.08, 0, y - 0.375, z, [a, 0, 0]), box(IRON, 0.2, 0.06, 0.2, 0, tip[0] - 0.03, tip[1]), fired ? [] : rock(SLATE, 0.11, 0, tip[0] + 0.1, tip[1], 0.9)];
+};
+const swords = (a) => [box(0xc8ccd4, 0.07, 0.75, 0.025, 0, 0.2, a > 0 ? 0.02 : -0.02, [0, 0, a]), box(BRASS, 0.22, 0.05, 0.05, 0.37 * Math.sin(a), 0.575 - 0.37 * Math.cos(a), a > 0 ? 0.02 : -0.02, [0, 0, a])];
+const TRAPS = {
+  trap_catapult: (n) => catapult(n),
+  trap_stone: (n) => [box(DARK, 0.82, 0.06, 0.76, 0, 0.09, -0.04, [0.18, 0, 0]), box(WOOD, 0.82, 0.14, 0.08, 0, 0, -0.4), rock(SLATE, 0.32, 0, n ? 0.34 : 0.45, n ? 0.34 : -0.1, 0.95), each([-0.28, 0.28], (x) => box(WOOD, 0.12, n ? 0.04 : 0.15, 0.12, x, 0, 0.4))],
+  trap_spawn: (n) => [ring(IRON, 0.4, 0.035, 0, 0.035, 0, FLAT), glow(cyl(n ? RED : PURPLE, 0.24, 0.02, 0, 0.005, 0, 0.24, 8)), each([0, 1.571, 3.142, 4.712], (a) => cone(BONE, 0.06, 0.34, Math.cos(a) * 0.4, 0, Math.sin(a) * 0.4, 4)),
+    n ? glow(...each([0, 2.1, 4.2], (a) => cone(RED, 0.08, 0.55, Math.cos(a) * 0.14, 0, Math.sin(a) * 0.14, 4))) : skull(0, 0.19, 0, 0.9)],
+  trap_dial: (n = 0) => { const a = n * QUARTER; return [cyl(STONE, 0.24, 0.45, 0, 0, 0, 0.18, 7), cyl(BRASS, 0.3, 0.06, 0, 0.45, 0, 0.3, 10), each([0, 1, 2, 3], (i) => box(IRON, 0.06, 0.03, 0.06, Math.sin(i * QUARTER) * 0.23, 0.51, Math.cos(i * QUARTER) * 0.23)),
+    box(RED, 0.05, 0.035, 0.22, Math.sin(a) * 0.1, 0.51, Math.cos(a) * 0.1, [0, a, 0]), ball(BLACK, 0.045, 0, 0.54, 0)]; },
+  trap_sight: (n) => [cyl(SLATE, 0.24, 0.1, 0, 0, 0, 0.24, 6), cyl(STONE, 0.12, 0.65, 0, 0.1, 0, 0.1, 6), ball(LINEN, 0.17, 0, 0.9, 0), ring(BRASS, 0.2, 0.022, 0, 0.9, 0), glow(ball(n ? RED : PURPLE, 0.09, 0, 0.9, 0.13))],
+  trap_gauge: (n = 0) => [cyl(DARK, 0.22, 0.07), box(DARK, 0.08, 0.7, 0.08, 0, 0.07), box(BRASS, 0.72, 0.05, 0.05, 0, 0.72, 0, [0, 0, n * -0.14]), each([-1, 1], (s) => { const y = 0.46 - s * n * 0.05; return [box(IRON, 0.015, 0.28, 0.015, s * 0.33, y), cyl(BRASS, 0.14, 0.035, s * 0.33, y, 0, 0.16, 8)]; }),
+    glow(ball([GREEN, FIRE, RED][n] ?? RED, 0.1, 0, 0.9, 0))],
+  trap_floor: (n) => [box(DARK, 0.94, 0.025, 0.94), n ? [box(BLACK, 0.78, 0.035, 0.78), each([-1, 1], (s) => box(WOOD, 0.38, 0.04, 0.78, s * 0.5, 0.13, 0, [0, 0, s * 1.05]))]
+    : [each([-0.2, 0.2], (x) => box(WOOD, 0.38, 0.04, 0.8, x, 0.01)), ring(IRON, 0.09, 0.018, 0.1, 0.065, 0, FLAT), each([-0.28, 0.28], (v) => box(IRON, 0.82, 0.015, 0.05, 0, 0.05, v))]],
+  trap_initiative: (n) => [cyl(SLATE, 0.32, 0.12, 0, 0, 0, 0.26, 7), swords(0.6), swords(-0.6), glow(ball(n ? RED : FLAME, 0.07, 0, 0.98, 0))],
+};
+
 const MODELS = {
+  ...TRAPS,
   // connectable things: view3d picks the one for the object's state (a tripwire's number is its length in cells)
   lever: () => lever(0.6, RED), lever_on: () => lever(-0.6, GREEN),
   button: () => [cyl(SLATE, 0.16, 0.5, 0, 0, 0, 0.12, 6), cyl(BRASS, 0.19, 0.06, 0, 0.5, 0, 0.19, 8), cyl(RED, 0.12, 0.08, 0, 0.56, 0, 0.11, 8)],
