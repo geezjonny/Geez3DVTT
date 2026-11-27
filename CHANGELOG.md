@@ -4,6 +4,10 @@ What changed in Geez3DVTT, newest first.
 
 ## 2026-11-27
 
+### Scenes and testing
+- The Alarus grounds scene is saved in `scene/`, ready to Import.
+- Tried at the table and working: companion rolls, roll call and first person.
+
 ### Player view
 - **"Who are you?"** Players pick their character when they open the page (a `?char=` link skips it). Nothing moves
   until they choose, and the list retries by itself if the characters are slow to load.

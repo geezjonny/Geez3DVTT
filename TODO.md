@@ -30,13 +30,13 @@ Gaps checked against this code on 2026-11-26. Tick an item when it works and has
 - [ ] `.dd2vtt` export
 
 ## Try at the table
-- [ ] A real `companion.html` roll shows on `gm.html` and `index.html`.
-- [ ] Roll call reaches a companion and the result comes back, initiative included.
+- [x] A real `companion.html` roll shows on `gm.html` and `index.html`.
+- [x] Roll call reaches a companion and the result comes back, initiative included.
 - [ ] Pack items in the companion: use, send, remove (on GeezSheets branch `companion-pack-items`, **not live** until merged).
 - [ ] Players cannot use a lever through a wall.
 - [ ] Button prop, and connecting in top-down view.
 - [ ] Download a `.geezmap` and a `.geezscene`, then Import each.
-- [ ] First person on a real map: walk, look up, leave, and check the view centres on the token.
+- [x] First person on a real map: walk, look up, leave, and check the view centres on the token.
 - [ ] Dragging props and levers in top-down view.
 - [ ] Speed on a weak PC with many props and shadows on.
 
