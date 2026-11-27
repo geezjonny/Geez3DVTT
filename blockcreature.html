@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Blockcreature Monster Creator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@500;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.min.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"}}</script>
+<style>
+/* VOICE: calm studio, a sculptor's turntable at game night
+   IDEA: a faceted low-poly figurine photographed on a white sweep
+   PICTURE: the live faceless low-poly hero, soft key light, contact shadow
+   COLOUR and TYPE: white studio stage, parchment panel, dragon-red accent; Pixelify Sans + Inter
+   LAYOUT: stage left (sticky), builder panel right; stacked stage-over-panel on phones */
+:root{color-scheme:light dark;--bg:light-dark(#f3ebe3,#1e1119);--panel:light-dark(#fffaf5,#27161f);--ink:light-dark(#2a1420,#f4e6ea);--muted:light-dark(#7a5a66,#b9a0aa);--line:light-dark(#e3d2c8,#3d2533);--acc:#d6334a}
+:root[data-theme=light]{color-scheme:light}:root[data-theme=dark]{color-scheme:dark}
+*{box-sizing:border-box;min-width:0}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 Inter,system-ui,sans-serif;overflow-x:clip}
+.app{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);min-height:100vh}
+.stage{position:sticky;top:0;height:100vh;background:radial-gradient(circle at 50% 42%,#ffffff,#e2e2e7 78%);overflow:hidden;color:#23161d}
+.stage canvas{position:absolute;inset:0;width:100%;height:100%;touch-action:pan-y;cursor:grab}
+.stage canvas:active{cursor:grabbing}
+.tag{position:absolute;left:20px;bottom:18px;pointer-events:none}
+.tag b{display:block;font:700 clamp(24px,3.4vw,40px)/1.05 'Pixelify Sans',sans-serif;text-wrap:balance}
+.tag span{color:#6b5a62;font-size:15px}
+.poses{position:absolute;top:14px;left:14px;right:14px;display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;scrollbar-width:thin}.poses button{flex:none}
+.zoom{position:absolute;right:14px;bottom:14px;display:flex;flex-direction:column;gap:6px}
+.poses button,.zoom button{min-height:40px;min-width:40px;border:1px solid rgba(0,0,0,.12);background:rgba(255,255,255,.8);color:#23161d;border-radius:10px;font:600 14px Inter,sans-serif;padding:0 12px;cursor:pointer;backdrop-filter:blur(4px)}
+.poses button.on,.zoom button.on{background:var(--acc);border-color:var(--acc);color:#fff}
+.panel{padding:24px clamp(16px,3vw,36px) 48px;background:var(--panel);border-left:1px solid var(--line)}
+h1{font:700 clamp(32px,4vw,46px)/1.05 'Pixelify Sans',sans-serif;margin:0 0 6px}
+.lead{margin:0 0 18px;color:var(--muted)}
+h2{font:600 13px Inter,sans-serif;color:var(--muted);margin:18px 0 8px}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+input[type=text]{flex:1 1 180px;min-height:46px;font:16px Inter,sans-serif;padding:0 14px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--ink)}
+.btn{min-height:46px;padding:0 16px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font:600 15px Inter,sans-serif;cursor:pointer}
+.btn.pri{background:var(--acc);color:#fff;border-color:var(--acc);font-family:'Pixelify Sans',sans-serif;font-size:17px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{min-height:40px;padding:0 13px;border-radius:999px;border:1px solid var(--line);background:transparent;color:var(--ink);font:500 14px Inter,sans-serif;cursor:pointer}
+.chip.on{background:var(--ink);color:var(--panel);border-color:var(--ink)}
+.sws{display:flex;flex-wrap:wrap;gap:8px}
+.sw{width:40px;height:40px;border-radius:8px;border:2px solid var(--line);background:var(--c);cursor:pointer;box-shadow:inset -6px -6px 0 rgba(0,0,0,.2),inset 6px 6px 0 rgba(255,255,255,.14)}
+.sw.on{outline:3px solid var(--acc);outline-offset:2px}
+.cols{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.cols label{font-size:13px;color:var(--muted);display:grid;gap:4px}
+.slides{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:8px}.slides label{font-size:13px;color:var(--muted);display:grid;gap:2px}input[type=range]{width:100%;min-height:32px;accent-color:var(--acc)}
+input[type=color]{width:100%;height:44px;border:1px solid var(--line);border-radius:10px;background:var(--bg);padding:3px;cursor:pointer}
+button:focus-visible,input:focus-visible,textarea:focus-visible{outline:3px solid var(--acc);outline-offset:2px}
+.sec{border-top:1px solid var(--line);margin-top:20px;padding-top:4px}
+.mem{display:flex;gap:6px;margin-bottom:6px}
+.memb{flex:1;display:flex;align-items:center;gap:10px;min-height:46px;padding:0 12px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font:600 15px Inter,sans-serif;cursor:pointer;text-align:left}
+.memb small{margin-left:auto;color:var(--muted);font-weight:400}
+.dot{width:18px;height:18px;border-radius:4px;flex:none}
+.x{min-width:46px;border-radius:12px;border:1px solid var(--line);background:transparent;color:var(--muted);font-size:20px;cursor:pointer}
+.empty{color:var(--muted);margin:0}
+.modal{position:fixed;inset:0;background:rgba(10,4,8,.6);display:grid;place-items:center;padding:16px;z-index:9}
+.modal[hidden]{display:none}
+.sheet{background:var(--panel);border-radius:16px;padding:20px;width:min(560px,100%);display:grid;gap:10px}
+.sheet h3{margin:0;font:700 24px 'Pixelify Sans',sans-serif}.sheet p{margin:0;color:var(--muted)}
+textarea{width:100%;height:180px;font:13px ui-monospace,monospace;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--ink);padding:10px}
+@media(max-width:900px){.app{grid-template-columns:1fr}.stage{height:48vh;z-index:2}.panel{border-left:0}.tag b{font-size:24px}}
+@media(max-width:420px){.poses button{padding:0 9px}}
+</style>
+</head>
+<body>
+<div class="app">
+  <section class="stage" id="view" aria-label="3D monster preview, drag to turn">
+    <div class="poses" id="poses"></div>
+    <div class="zoom"><button id="zin" aria-label="Zoom in">+</button><button id="zout" aria-label="Zoom out">−</button><button id="spin" aria-label="Turntable">⟳</button></div>
+    <div class="tag"><b id="nm"></b><span id="sub"></span></div>
+  </section>
+  <aside class="panel">
+    <h1>Blockcreature</h1>
+    <p class="lead">Faceted low-poly monsters. Start from a preset, then change anything. Each floor square is 5 ft. <a href="blockfolk.html" style="color:inherit">Make heroes instead</a>.</p>
+    <div class="row"><input type="text" id="name" maxlength="40" aria-label="Monster name" placeholder="Monster name"><button class="btn pri" id="rand">Roll a monster</button></div>
+    <h2>Start from</h2><div class="chips" id="c-preset"></div>
+    <div class="sec"><h2>Body</h2><div class="chips" id="c-body"></div><div class="slides"><label>Size <input type="range" data-s="size"></label><label>Bulk <input type="range" data-s="bulk"></label></div></div>
+    <div class="sec"><h2>Head</h2><div class="chips" id="c-head"></div><h2>Mouth</h2><div class="chips" id="c-mouth"></div><div class="slides"><label>Head size <input type="range" data-s="headSize"></label><label>Eyes <input type="range" data-s="eyes"></label><label>Eye size <input type="range" data-s="eyeSize"></label></div></div>
+    <div class="sec"><h2>Legs</h2><div class="chips" id="c-limbs"></div><h2>Arms</h2><div class="chips" id="c-arms"></div><div class="slides"><label>How many legs <input type="range" data-s="count"></label><label>Limb length <input type="range" data-s="limbLen"></label></div></div>
+    <div class="sec"><h2>Horns</h2><div class="chips" id="c-horns"></div><h2>Back</h2><div class="chips" id="c-back"></div><h2>Tail</h2><div class="chips" id="c-tail"></div><h2>Markings</h2><div class="chips" id="c-markings"></div><h2>Floats</h2><div class="chips" id="c-float"></div><h2>Glowing aura</h2><div class="chips" id="c-aura"></div></div>
+    <div class="sec"><h2>Colours</h2><div class="cols"><label>Skin<input type="color" id="k-skin"></label><label>Accent<input type="color" id="k-accent"></label><label>Eyes and glow<input type="color" id="k-glow"></label></div></div>
+    <div class="sec">
+      <h2>Save and export</h2>
+      <div class="row"><button class="btn pri" id="save">Save monster</button><button class="btn" id="cjson">Copy code</button><button class="btn" id="ljson">Load code</button></div>
+      <h2>Saved monsters</h2><div id="saved"></div>
+    </div>
+  </aside>
+</div>
+<div class="modal" id="modal" hidden><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="mt">
+  <h3 id="mt"></h3><p id="md"></p><textarea id="mx" spellcheck="false"></textarea>
+  <div class="row"><button class="btn pri" id="mcopy">Copy</button><button class="btn" id="mload">Load</button><button class="btn" id="mclose">Close</button></div>
+</div></div>
+<script>
+window.addEventListener('error',e=>{const v=document.getElementById('view');if(!v||document.getElementById('err'))return;const d=document.createElement('div');d.id='err';d.style.cssText='position:absolute;inset:auto 14px 70px 14px;background:#fff;border:2px solid #d6334a;border-radius:12px;padding:12px;font:14px Inter,sans-serif;color:#2a1420;z-index:5';d.textContent='Something broke while drawing: '+(e.message||'unknown error')+'. Send this text to Claude.';v.append(d)});
+</script>
+<script type="module">
+import * as THREE from "three";
+import { MONSTER_PARTS, MONSTER_SLIDERS, MONSTER_COLORS, PRESETS, cleanCreature } from "./js/vtt/blockcreature-data.js";
+import { makeMini } from "./js/vtt/blockfolk.js";
+import { EMOTES } from "./js/vtt/acts.js";
+const $=s=>document.querySelector(s),view=$('#view'),KEY='blockcreature-saved';
+const preset=n=>cleanCreature({...PRESETS[n],creature:'monster',name:n});
+let S=preset('Squishy'),mini=null,pose='idle',zoom=1,yaw=-.35,spin=false,drag=null;
+
+const renderer=new THREE.WebGLRenderer({antialias:true,alpha:true});renderer.setPixelRatio(Math.min(devicePixelRatio,2));view.prepend(renderer.domElement);
+const scene=new THREE.Scene(),cam=new THREE.PerspectiveCamera(28,1,.1,200),root=new THREE.Group();scene.add(root);
+scene.add(new THREE.HemisphereLight(0xffffff,0x8a8680,2));const sun=new THREE.DirectionalLight(0xffffff,1.7);sun.position.set(-2,4,3);scene.add(sun);
+const grid=new THREE.GridHelper(7,7,0xa8a4ae,0xc4c0ca);scene.add(grid);
+const looks=[new THREE.MeshLambertMaterial({vertexColors:true,flatShading:true,side:THREE.DoubleSide}),new THREE.MeshBasicMaterial({vertexColors:true})];
+
+function build(){
+ if(mini)root.remove(mini.group);
+ mini=makeMini(cleanCreature(S),looks);root.add(mini.group);frame()}
+function frame(){const w=view.clientWidth,h=view.clientHeight;if(!w||!h)return;renderer.setSize(w,h,false);cam.aspect=w/h;cam.updateProjectionMatrix();
+ const H=Math.max(mini?.height||1,.9);let d=Math.max(H*2.9,3.4)/zoom;if(cam.aspect<.9)d*=.9/cam.aspect;cam.position.set(0,H*.5+d*.3,d);cam.lookAt(0,H*.45,0)}
+new ResizeObserver(frame).observe(view);
+const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches,clock=new THREE.Clock();
+function tick(){const t=reduce?0:clock.getElapsedTime();if(spin&&!reduce)yaw+=.006;root.rotation.y=yaw;
+ mini.pose(pose==='idle'?null:pose,pose==='attack'||pose==='hurt'?t%1:t);mini.hover?.(pose==='sit'||pose==='sleep'?0:t);
+ renderer.render(scene,cam);requestAnimationFrame(tick)}
+const cv=renderer.domElement;
+cv.addEventListener('pointerdown',e=>{drag={x:e.clientX,y:yaw};cv.setPointerCapture(e.pointerId)});
+cv.addEventListener('pointermove',e=>{if(drag)yaw=drag.y+(e.clientX-drag.x)*.012});
+cv.addEventListener('pointerup',()=>drag=null);cv.addEventListener('pointercancel',()=>drag=null);
+const setZoom=f=>{zoom=Math.min(2.6,Math.max(.5,zoom*f));frame()};
+cv.addEventListener('wheel',e=>{e.preventDefault();setZoom(e.deltaY>0?.92:1.08)},{passive:false});
+$('#zin').onclick=()=>setZoom(1.15);$('#zout').onclick=()=>setZoom(.87);
+$('#spin').onclick=e=>{spin=!spin;e.currentTarget.classList.toggle('on',spin)};
+
+const NAMES={batwings:'Bat wings',featherwings:'Feather wings',spider:'Spider legs',maw:'Maw of teeth',orb:'Ball',auto:'Plain'};
+const cap1=v=>NAMES[v]||v[0].toUpperCase()+v.slice(1);
+const POSES=['idle','walk','attack','hurt',...EMOTES.map(e=>e[1])];
+const renderPoses=()=>{$('#poses').innerHTML=POSES.map(p=>`<button data-v="${p}" class="${p===pose?'on':''}">${cap1(p)}</button>`).join('')};
+$('#poses').addEventListener('click',e=>{const b=e.target.closest('button');if(b){pose=b.dataset.v;renderPoses()}});
+const chip=(v,on,text)=>`<button class="chip${on?' on':''}" data-v="${v}">${text}</button>`;
+function renderUI(){
+ $('#c-preset').innerHTML=Object.keys(PRESETS).map(n=>chip(n,false,n)).join('');
+ for(const [k,list] of Object.entries(MONSTER_PARTS))$('#c-'+k).innerHTML=list.map(v=>chip(v,v===S[k],cap1(v))).join('');
+ for(const k of Object.keys(MONSTER_COLORS))$('#k-'+k).value=S[k];
+ document.querySelectorAll('[data-s]').forEach(r=>{const k=r.dataset.s,[lo,hi,,step]=MONSTER_SLIDERS[k];r.min=lo;r.max=hi;r.step=step;r.value=S[k]});
+ $('#name').value=S.name;$('#nm').textContent=S.name||'Unnamed monster';$('#sub').textContent=`${cap1(S.body)} · about ${Math.max(1,Math.round(mini.height/1.15*5.7*2)/2)} ft tall`}
+const update=()=>{build();renderUI()};
+$('#c-preset').addEventListener('click',e=>{const b=e.target.closest('button');if(b){S=preset(b.dataset.v);update()}});
+for(const k of Object.keys(MONSTER_PARTS))$('#c-'+k).addEventListener('click',e=>{const b=e.target.closest('button');if(b){S[k]=b.dataset.v;update()}});
+let pend=0;const redraw=()=>{if(!pend)pend=requestAnimationFrame(()=>{pend=0;update()})};
+for(const k of Object.keys(MONSTER_COLORS))$('#k-'+k).addEventListener('input',e=>{S[k]=e.target.value;redraw()});
+document.querySelectorAll('[data-s]').forEach(r=>r.addEventListener('input',()=>{S[r.dataset.s]=Number(r.value);redraw()}));
+$('#name').addEventListener('input',e=>{S.name=e.target.value;$('#nm').textContent=S.name||'Unnamed monster'});
+const pick=a=>a[Math.random()*a.length|0],hex=()=>'#'+new THREE.Color().setHSL(Math.random(),.35+Math.random()*.4,.28+Math.random()*.3).getHexString();
+$('#rand').onclick=()=>{const c={creature:'monster',name:pick(['Grub','Maw','Skit','Gloom','Fang','Murk','Bog','Zil'])+pick(['ling','jaw','tooth','back','eye','spawn']),skin:hex(),accent:hex(),glow:'#'+new THREE.Color().setHSL(Math.random(),.9,.6).getHexString()};
+ for(const [k,list] of Object.entries(MONSTER_PARTS))c[k]=pick(list);
+ for(const [k,[lo,hi,start,step]] of Object.entries(MONSTER_SLIDERS))c[k]=step===1?lo+Math.floor(Math.random()*(hi-lo+1)):start*(.8+Math.random()*.4);
+ S=cleanCreature(c);update()};
+
+let saved=[];try{saved=JSON.parse(localStorage.getItem(KEY)||'[]');if(!Array.isArray(saved))saved=[]}catch(e){saved=[]}
+const keep=()=>{try{localStorage.setItem(KEY,JSON.stringify(saved))}catch(e){}};
+function renderSaved(){const el=$('#saved');el.textContent='';
+ if(!saved.length){el.innerHTML='<p class="empty">Saved monsters appear here, in this browser.</p>';return}
+ saved.forEach((c,i)=>{const row=document.createElement('div');row.className='mem';const b=document.createElement('button');b.className='memb';
+  const dot=document.createElement('span');dot.className='dot';dot.style.background=/^#[0-9a-f]{6}$/i.test(c?.skin)?c.skin:'#888';
+  const t=document.createElement('span');t.textContent=c?.name||'Unnamed';b.append(dot,t);b.onclick=()=>{try{S=cleanCreature(c);update()}catch(e){}};
+  const x=document.createElement('button');x.className='x';x.textContent='×';x.setAttribute('aria-label','Remove '+(c?.name||'monster'));
+  x.onclick=()=>{saved.splice(i,1);keep();renderSaved()};row.append(b,x);el.append(row)})}
+$('#save').onclick=()=>{const i=saved.findIndex(c=>c.name&&c.name===S.name);if(i>=0)saved[i]={...S};else saved.push({...S});keep();renderSaved()};
+
+const modal=$('#modal'),mx=$('#mx');
+function openM(title,desc,text,load){$('#mt').textContent=title;$('#md').textContent=desc;mx.value=text;$('#mload').hidden=!load;$('#mcopy').hidden=load;$('#mcopy').textContent='Copy';modal.hidden=false;(load?mx:$('#mclose')).focus()}
+$('#mclose').onclick=()=>modal.hidden=true;modal.addEventListener('click',e=>{if(e.target===modal)modal.hidden=true});
+document.addEventListener('keydown',e=>{if(e.key==='Escape')modal.hidden=true});
+$('#mcopy').onclick=e=>{const b=e.currentTarget;navigator.clipboard.writeText(mx.value).then(()=>b.textContent='Copied').catch(()=>{mx.select();b.textContent='Selected, copy manually'})};
+$('#mload').onclick=()=>{try{S=cleanCreature(JSON.parse(mx.value));update();modal.hidden=true}catch(e){$('#md').textContent=e.message||'That is not a monster code.'}};
+$('#cjson').onclick=()=>openM('Monster code','Keep this to rebuild the monster later with Load code, or paste it on a token.',JSON.stringify(S),false);
+$('#ljson').onclick=()=>openM('Load a monster','Paste a monster code below.','',true);
+
+update();renderPoses();renderSaved();tick();
+</script>
+</body>
+</html>

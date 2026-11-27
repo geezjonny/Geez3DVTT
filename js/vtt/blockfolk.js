@@ -2,6 +2,7 @@
 import * as THREE from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { RACES, SCALE, UPI, PARTS, SLIDERS } from "./blockfolk-data.js";
+import { buildCreature, moveCreature } from "./blockcreature.js";
 
 const BONE='#e8dfc8',FUR='#8a6a4a';
 const METAL='#c4cad3',WOOD='#7a5230',GOLD='#e0b84a',LEATHER='#6b4a2e';
@@ -265,42 +266,6 @@ export function applyPose(r,pose,t){const [A,B]=r.arms,[L0,L1]=r.legs;
  else{const w=Math.sin(t*1.6);A.sh.rotation.z+=-w*.02;B.sh.rotation.z+=w*.02}
  return{y,z,cw,tilt,sway,spin}}
 
-// ---- Squishy's kind: a floating baby octopus with six glowing eyes, in the same units as the heroes ----
-function buildOctopus(){
- jr=rng(11);const model=new THREE.Group(),SKIN='#6a35b0',DARK='#4a2288',PALE='#9a6ad0',GLOW='#9dff4a',float=3.4;
- const body=grp(model,0,float,0);
- T(body,[[.1,1.7,1.7],[1.2,3.4,3.2],[3.0,3.8,3.5],[4.8,3.3,3.0,0,-.4],[6.6,2.2,2.0,0,-1.3],[8.2,1.0,.9,0,-2.2],[9.1,.15,.15,0,-2.9]],{n:9,cols:[DARK,SKIN,SKIN,SKIN,SKIN,PALE]});
- [-1,1].forEach(s=>{const f=cone(body,1.5,3.4,PALE,s*2.6,6.4,-1.7,3);f.scale.set(1,1,.22);f.rotation.z=-s*.75}); // side fins
- [[-1.35,2.15,1.35],[1.35,2.15,1.35],[-2.85,3.9,.98],[2.85,3.9,.98],[-1.0,4.55,.9],[1.0,4.55,.9]].forEach(([x,y,r])=>{
-  const a=Math.asin(x/3.9),eye=grp(body,x,y,Math.cos(a)*3.35-(y>4?.25:0));eye.rotation.set(y>4?-.25:0,a,0);
-  sph(eye,r,DARK,0,0,0,1,1,.6,8);sph(eye,r*.82,glow(GLOW),0,0,r*.28,1,1,.55,8);sph(eye,r*.5,glow('#06140a'),0,0,r*.6,1,1,.45,8);sph(eye,r*.16,glow('#ffffff'),-r*.2,r*.22,r*.84,1,1,.6,8)});
- cone(body,.45,.9,'#f0c46a',0,.95,3.45,4).rotation.x=Math.PI*.72; // beak
- const mark=add(body,new THREE.TorusGeometry(.55,.15,4,9,Math.PI*1.3),glow(GLOW),0,6.15,1.05);mark.rotation.set(-.5,0,.9); // crescent
- [[0,7.35,.0,.32],[0,5.25,2.25,.28]].forEach(([x,y,z,r])=>add(body,new THREE.OctahedronGeometry(r),glow(GLOW),x,y,z));
- for(let i=0;i<26;i++){const y=1.6+jr()*5.6,t=(jr()<.5?-1:1)*(.9+jr()*2),r=y<4.8?3.65:3.65-(y-4.8)*.9,off=y<3?0:-(y-3)*.42;sph(body,.09+jr()*.1,glow(GLOW),Math.sin(t)*r,y,Math.cos(t)*r*.93+off)}
- const arms=Array.from({length:8},(_,i)=>{const a=(i+.5)/8*Math.PI*2,g=grp(model,Math.sin(a)*1.5,float+.7,Math.cos(a)*1.5);g.rotation.order='YXZ';g.rotation.y=a;
-  T(g,[[0,1.15,.95],[1.8,.95,.8,0,-1.2],[3.5,.72,.62,0,-2.1],[5.0,.5,.45,0,-2.2],[6.2,.32,.3,0,-1.5],[6.7,.12,.12,0,-.6]],{n:6,axis:'z',cols:[SKIN,SKIN,SKIN,PALE,PALE]});
-  [[1.3,-1.5],[2.6,-2.35],[3.9,-2.7],[5.1,-2.6],[6.1,-1.75]].forEach(([z,y],k)=>[-1,1].forEach(s=>sph(g,.24-k*.03,glow(GLOW),s*(.72-k*.11),y+.35,z)));
-  return g});
- return{model,refs:{arms,sc:1,H:float+9.4}}}
-// Moves the octopus: tentacles ripple, and the whole body does its own version of each animation.
-function swim(arms,name,t){
- const speed=name==='walk'||name==='attack'?11:name==='sleep'?1.4:6,amp=name==='walk'?.38:name==='sleep'?.06:.22,flare=['attack','cheer','flex','shrug'].includes(name)?-.55:0;
- arms.forEach((a,i)=>a.rotation.x=Math.sin(t*speed+i*1.7)*amp+flare);
- let y=0,z=0,tilt=0,sway=0,spin=0;const k=Math.sin(Math.PI*Math.min(1,t/.77));
- if(name==='walk'){tilt=.18;y=Math.sin(t*9)*.4}
- else if(name==='attack'){z=k*3;tilt=k*.4}
- else if(name==='hurt'){const h=Math.sin(Math.PI*(t%.5)/.5);tilt=-.5*h;z=-1.5*h}
- else if(name==='wave'){arms[0].rotation.x=-1.2+Math.sin(t*9)*.4}
- else if(['cheer','jump','laugh','fart'].includes(name)){y=Math.abs(Math.sin(t*7))*2.2}
- else if(name==='dance'){spin=t*4;y=Math.abs(Math.sin(t*6))*1.2;sway=Math.sin(t*5)*.25}
- else if(name==='bow'||name==='facepalm'||name==='cry'){tilt=.45*Math.min(1,t*4)}
- else if(name==='yes'){tilt=Math.sin(t*13)*.25}
- else if(name==='no'){spin=Math.sin(t*13)*.5}
- else if(name==='point'){arms[0].rotation.x=-.9;tilt=.15}
- else if(name==='sit'||name==='sleep'){y=-1.4;if(name==='sleep'){sway=.2;tilt=-.15}}
- return{y,z,tilt,sway,spin}}
-
 // ---- minis for the table: a human about 1.15 squares tall ----
 const SIZE = 1.15 / (68 * UPI), heroes = new Map();
 // One geometry for lit faces and one for glowing ones; `at` places each mesh.
@@ -314,18 +279,21 @@ function bake(meshes, at) {
   }
   return [lit, glowing].map((list) => { if (!list.length) return null; const g = mergeGeometries(list); list.forEach((x) => x.dispose()); g.userData.shared = true; return g; });
 }
-// A hero built once: merged whole for standing still, and merged per joint for moving.
+// what a monster is built from
+const kit = () => { jr = rng(11); return { grp, sph, cyl, cone, box, add, T, glow, shade, random: rng, MM, GOLD }; };
+// A figure built once: merged whole for standing still, and merged per joint for moving.
 function template(hero) {
   const key = JSON.stringify(hero);
   if (heroes.has(key)) return heroes.get(key);
-  const octopus = hero.creature === "octopus", { model, refs: r } = octopus ? buildOctopus() : buildHero(hero);
-  if (!octopus) applyPose(r, "idle", 0);
+  const beast = hero.creature ? buildCreature(hero, kit()) : null, { model, refs: r } = beast ? { model: beast.model, refs: {} } : buildHero(hero);
+  if (beast) model.scale.setScalar(beast.sc); else applyPose(r, "idle", 0);
   model.updateMatrixWorld(true);
-  const joints = octopus ? [model, ...r.arms] : [model, ...r.legs.flatMap((l) => [l.hip, l.knee]), ...r.arms.flatMap((a) => [a.sh, a.el]), r.neck], owned = joints.map(() => []), all = [];
+  const joints = beast ? [model, ...beast.limbs.map((l) => l.node)] : [model, ...r.legs.flatMap((l) => [l.hip, l.knee]), ...r.arms.flatMap((a) => [a.sh, a.el]), r.neck], owned = joints.map(() => []), all = [];
   model.traverse((o) => { if (!o.isMesh) return; let p = o; while (!joints.includes(p)) p = p.parent; owned[joints.indexOf(p)].push(o); all.push(o); });
   const fit = new THREE.Matrix4().makeScale(SIZE, SIZE, SIZE);
   const out = {
-    octopus, height: r.H * SIZE, sc: r.sc, fwd: r.fwd, sides: octopus ? [] : r.arms.map((a) => a.s),
+    creature: beast && { limbs: beast.limbs.map(({ kind, side, phase, node }) => ({ kind, side, phase, rest: node.rotation.clone() })), floating: beast.floating, aura: beast.aura },
+    height: (beast ? beast.height : r.H) * SIZE, sc: beast ? beast.sc : r.sc, fwd: r.fwd, sides: beast ? [] : r.arms.map((a) => a.s),
     still: bake(all, (o) => fit.clone().multiply(o.matrixWorld)),
     nodes: joints.map((j, i) => { const back = j.matrixWorld.clone().invert(); return { parent: joints.indexOf(j.parent), position: j.position.clone(), rotation: j.rotation.clone(), parts: bake(owned[i], (o) => back.clone().multiply(o.matrixWorld)) }; }),
   };
@@ -344,10 +312,11 @@ export function makeMini(hero, looks) {
   const [, h0, k0, h1, k1, s0, e0, s1, e1, neck] = nodes, limbs = { neck, fwd: m.fwd, legs: [{ hip: h0, knee: k0, s: -1 }, { hip: h1, knee: k1, s: 1 }], arms: [{ sh: s0, el: e0, s: m.sides[0] }, { sh: s1, el: e1, s: m.sides[1] }] };
   const pose = (name, t) => {
     still.visible = !name; rig.visible = !!name; if (!name) return;
-    const body = m.octopus ? swim(nodes.slice(1), name, t) : applyPose(limbs, name, t); rig.position.set(0, body.y * m.sc * SIZE, body.z * m.sc * SIZE); rig.rotation.set(body.tilt, body.spin, body.sway);
+    const body = m.creature ? moveCreature(m.creature.limbs.map((l, i) => ({ ...l, node: nodes[i + 1] })), name, t) : applyPose(limbs, name, t); rig.position.set(0, body.y * m.sc * SIZE, body.z * m.sc * SIZE); rig.rotation.set(body.tilt, body.spin, body.sway);
   };
-  if (!m.octopus) return { group, height: m.height, pose };
-  const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: haloT, color: "#7dff5a", blending: THREE.AdditiveBlending, transparent: true, opacity: 0.4 * (looks[0].opacity ?? 1), depthWrite: false }));
-  halo.position.y = m.height * 0.55; halo.scale.setScalar(m.height * 1.7); halo.raycast = () => {}; bob.add(halo);
-  return { group, height: m.height, pose, hover: (t) => { bob.position.y = Math.sin(t * 2.2) * 0.05; } };
+  if (m.creature?.aura) {
+    const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: haloT, color: m.creature.aura, blending: THREE.AdditiveBlending, transparent: true, opacity: 0.4 * (looks[0].opacity ?? 1), depthWrite: false }));
+    halo.position.y = m.height * 0.55; halo.scale.setScalar(m.height * 1.7); halo.raycast = () => {}; bob.add(halo);
+  }
+  return { group, height: m.height, pose, hover: m.creature?.floating ? (t) => { bob.position.y = Math.sin(t * 2.2) * 0.05; } : null };
 }

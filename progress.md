@@ -12,6 +12,8 @@
 - **Creator:** body sliders; head, torso, arm and leg types; ears, horns, tail; more armour, weapons, hats and
   accessories; any skin, hair and eye colour.
 - **Squishy:** a floating, glowing six-eyed octopus mini, picked from **3D mini…**.
+- **Monster creator:** new `blockcreature.html` with seven body shapes, legs, arms, heads, eyes, wings, tails, markings
+  and presets (Squishy included). Saved monsters appear in **3D mini…** like heroes.
 - **Token menu:** type or step HP, and set token size.
 - Castle scene saved in `scene/` as "Battle at Castle Alaris": more props, and minis on 7 tokens.
 
@@ -22,7 +24,7 @@
 ### Left to do
 - Try in the live app: dragging and moving long doors, the **Emote** menu, a GM attack, a companion attack roll (the GM
   page must be open), an HP drop, the HP boxes, **Size** and the octopus.
-- The octopus has no colour or shape choices in the creator.
+- Try a saved monster on a token. Monster looks were checked as test renders; their animations only for errors.
 - Doors in the top-down view and glTF export from the creator are untested.
 - Player spells cast without any roll show no effect.
 - Older open items are in `TODO.md`.

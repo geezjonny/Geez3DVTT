@@ -1,4 +1,5 @@
 // Blockfolk heroes (blockfolk.html): the choices, and the check every saved or pasted hero code goes through.
+import { cleanCreature } from './blockcreature-data.js';
 export const HUM=['#f1c7a5','#d9a27c','#b97a52','#8a5636','#5c3a24'];
 export const RACES={
  Human:{skins:HUM,hair:'short'},
@@ -45,7 +46,7 @@ export const UPI=17.85/68; // model units per inch (base human = 5'8")
 const HEX=/^#[0-9a-f]{6}$/i;
 // A hero code with every value checked; anything missing or unknown takes the class or race default. Throws without a race and class.
 export function cleanHero(c){
- if(c&&c.creature==='octopus')return{creature:'octopus',name:'Glowing octopus'};
+ if(c&&c.creature)return cleanCreature(c); // a monster (blockcreature.html)
  if(!c||!Object.hasOwn(RACES,c.race)||!Object.hasOwn(CLASSES,c.cls))throw new Error('That code is missing a valid race or class.');
  const R=RACES[c.race],K=CLASSES[c.cls],n={race:c.race,cls:c.cls,name:String(c.name||'').slice(0,40)};
  for(const [k,list,d] of [['hair',HAIRS,R.hair],['beard',BEARDS,R.beard||'none'],['hat',HATS,K.hat],['main',ITEMS,K.main],['off',ITEMS,K.off],['style',STYLES,K.style],['cape',CAPES,K.cape]])n[k]=list.includes(c[k])?c[k]:d;

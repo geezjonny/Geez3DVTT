@@ -516,13 +516,15 @@ function showActionMenu(e, title, items, fields = [], extra) {
 }
 // Optional 3D figure for a token (blockfolk.html), from this browser's saved party or a pasted code. The picture stays.
 function miniMenu(e, id) {
-  let party = []; try { party = JSON.parse(localStorage.getItem("blockfolk-party")) || []; } catch { /* none saved */ }
+  const saved = (key) => { try { const list = JSON.parse(localStorage.getItem(key)); return Array.isArray(list) ? list : []; } catch { return []; } };
   const use = (code) => { try { put(`tokens/${id}/mini`, cleanHero(code)); } catch (err) { toast(err.message); } };
   showActionMenu(e, "3D mini", [
-    ...(Array.isArray(party) ? party : []).map((h) => [`${h?.name || "Unnamed"} (${h?.race} ${h?.cls})`, () => use(h)]),
-    ["Paste hero code…", () => { const text = prompt("Paste a Blockfolk hero code (Copy code in the creator)"); if (!text) return; let code; try { code = JSON.parse(text); } catch { return toast("That is not a hero code."); } use(code); }],
-    ["Open the creator", () => window.open("blockfolk.html", "_blank")],
-    ["Glowing octopus (6 eyes)", () => use({ creature: "octopus" })],
+    ...saved("blockfolk-party").map((h) => [`${h?.name || "Unnamed"} (${h?.race} ${h?.cls})`, () => use(h)]),
+    ...saved("blockcreature-saved").map((m) => [`${m?.name || "Unnamed"} (monster)`, () => use(m)]),
+    ["Paste mini code…", () => { const text = prompt("Paste a hero or monster code (Copy code in a creator)"); if (!text) return; let code; try { code = JSON.parse(text); } catch { return toast("That is not a mini code."); } use(code); }],
+    ["Open the hero creator", () => window.open("blockfolk.html", "_blank")],
+    ["Open the monster creator", () => window.open("blockcreature.html", "_blank")],
+    ["Squishy (glowing octopus)", () => use({ creature: "octopus" })],
     ...(S.tokens[id]?.mini ? [["Remove mini (use picture)", () => put(`tokens/${id}/mini`, null)]] : []),
   ]);
 }
