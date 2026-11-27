@@ -5,6 +5,10 @@ What changed in Geez3DVTT, newest first.
 ## 2026-11-27
 
 ### Player view
+- **"Who are you?"** Players pick their character when they open the page (a `?char=` link skips it). Nothing moves
+  until they choose, and the list retries by itself if the characters are slow to load.
+- **One wall height for the table:** the GM's Walls slider sets it for everyone; players no longer have their own.
+- **Voice and video are gone from the table;** use Discord.
 - **First person:** the eye button on the player page. Drag to look around, walk with WASD, turn with the arrows.
   Floors above are ceilings; where there is none you see higher floors and a sky that follows the time of day.
 - **The view stays centred on your token** as it moves, keeping your zoom and angle.

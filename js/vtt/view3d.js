@@ -6,6 +6,7 @@ import * as THREE from "three";
 import { MapControls } from "three/addons/controls/MapControls.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { S, mapSize } from "./state.js";
+import { watch, put } from "../store.js";
 import { isPcToken, wallPieces } from "./draw.js";
 import { visibleToPlayer } from "./visibility.js";
 import { isCurrentlyVisible } from "./explored-vtt.js";
@@ -159,12 +160,16 @@ function init() {
   host = document.createElement("div"); host.id = "view3d"; host.hidden = true; document.body.append(host);
   const vignette = document.createElement("div"); vignette.className = "v3-vignette"; host.append(vignette);
   const opts = document.createElement("div"); opts.className = "v3-opts";
-  opts.innerHTML = `<label>Quality <select><option value="auto">Auto</option><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select></label><label>Walls <input type="range" min="0.25" max="2.4" step="0.05"></label>`;
+  opts.innerHTML = `<label>Quality <select><option value="auto">Auto</option><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select></label>${S.isGM ? '<label>Walls <input type="range" min="0.25" max="2.4" step="0.05"></label>' : ""}`;
   document.body.append(opts); // above the top-down input layer
   opts.addEventListener("pointerdown", (e) => e.stopPropagation());
-  const q = opts.querySelector("select"), h = opts.querySelector("input"); q.value = choice; h.value = WALL_H;
+  const q = opts.querySelector("select"), h = opts.querySelector("input"); q.value = choice;
   q.addEventListener("change", () => { choice = q.value; keep("quality", choice); setLevel(choice === "auto" ? guessQuality() : choice); q.blur(); });
-  h.addEventListener("change", () => { WALL_H = Number(h.value); keep("height", WALL_H); staticSig = ""; pending = true; h.blur(); });
+  h?.addEventListener("change", () => { put("wallHeight", Number(h.value)); h.blur(); });
+  watch("wallHeight", (v) => { // one height for the whole table, set by the GM
+    if (v == null && S.isGM) return put("wallHeight", WALL_H); // first time: share the height this GM browser last used
+    WALL_H = clamp(Number(v) || 1.1, 0.25, 2.4); if (h) h.value = WALL_H; staticSig = ""; pending = true;
+  });
   makeRenderer();
   new ResizeObserver(resize).observe(host);
   flat = document.getElementById("map");

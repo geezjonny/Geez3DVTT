@@ -213,9 +213,9 @@ document.addEventListener("pointerdown", (e) => { if (tokMenu && !tokMenu.contai
 document.addEventListener("keydown", (e) => { if (e.key !== "Escape") return; closeTokMenu(); if (S.pick?.zone === "link") { S.pick = null; map.classList.remove("picking"); } });
 const SHEET_URL = "https://geezjonny.github.io/GeezSheets/companion.html";   // GeezSheets (sheet.html?char=<pc id>); change if hosted elsewhere
 let pcs = null;   // player characters from the main app (read only): [{ id, name }]
-function loadPcs() {   // the pending read is shared, so a second caller never gets an empty list; a failed read is retried
+function loadPcs() {   // the pending read is shared; a failed or empty read is not kept, so the next call reads again
   return pcs ||= readAt("characters/pcs")
-    .then((all) => Object.entries(all || {}).map(([id, c]) => ({ id, name: c?.name || c?.identity?.name || c?.basic?.name || "" })))
+    .then((all) => { const list = Object.entries(all || {}).map(([id, c]) => ({ id, name: c?.name || c?.identity?.name || c?.basic?.name || "" })); if (!list.length) pcs = null; return list; })
     .catch((err) => { console.warn("Could not read PCs", err); pcs = null; return []; });
 }
 // ---- GeezSheets write-back: a PC token's HP and conditions live on their sheet (same fields the sheet writes) ----

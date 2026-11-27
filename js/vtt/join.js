@@ -13,10 +13,11 @@ export function initJoin({ loadPcs, setMe, getMe }) {
   document.body.append(card); card.showModal();
 
   const button = (text, onClick) => { const b = document.createElement("button"); b.type = "button"; b.textContent = text; b.addEventListener("click", onClick); return b; };
-  async function fill() {
+  async function fill(tries = 5) {
     list.textContent = "Loading characters…";
     const pcs = (await loadPcs()).filter((c) => c.name).sort((a, b) => a.name.localeCompare(b.name));
-    if (!pcs.length) return list.replaceChildren("Could not load the characters.", button("Try again", fill));
+    if (!pcs.length && tries > 1) return setTimeout(fill, 1500, tries - 1);   // the first read can arrive empty
+    if (!pcs.length) return list.replaceChildren("Could not load the characters.", button("Try again", () => fill()));
     const buttons = pcs.map((pc) => button(pc.name, () => { S.choosing = false; card.remove(); setMe({ id: pc.id, name: pc.name }); }));
     list.replaceChildren(...buttons);
     (buttons[pcs.findIndex((c) => c.id === getMe()?.id)] || buttons[0]).focus();   // last time's character: Enter joins
