@@ -1,5 +1,6 @@
 // Movement limits for players: tokens can't cross walls or closed doors/windows.
 // Cells are 40px, tokens sit on cell centres; a step is blocked if the line between two cell centres touches a wall.
+import { doorSeg } from "./door-segment.js";
 import { S, mapSize } from "./state.js";
 
 const ccw = (ax, ay, bx, by, cx, cy) => (bx - ax) * (cy - ay) - (by - ay) * (cx - ax);
@@ -12,12 +13,7 @@ function touches(a, b) {   // segments a=[x1,y1,x2,y2], b: do they intersect (to
     || (d3 === 0 && onSeg(a[0], a[1], a[2], a[3], b[0], b[1])) || (d4 === 0 && onSeg(a[0], a[1], a[2], a[3], b[2], b[3]));
 }
 
-// The line a door fills: the exact one from a map import, otherwise one cell (two for double doors) around its centre.
-export function doorSeg(o) {
-  if (o.seg) return o.seg;
-  const n = (o.doorKind || o.kindName) === "double" ? 40 : 20;
-  return o.dir === "v" ? [o.x, o.y - n, o.x, o.y + n] : [o.x - n, o.y, o.x + n, o.y];
-}
+export { doorSeg };
 
 // Everything solid on a floor (every floor when none is given): walls, closed doors and windows.
 export function solidSegments(level = null) {

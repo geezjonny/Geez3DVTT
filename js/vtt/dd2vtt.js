@@ -1,6 +1,7 @@
 // Universal VTT (.dd2vtt) import/export. The parser is deliberately independent
 // of the browser, Firebase, and the rest of the VTT so it can be tested in Node.
 
+import { doorSeg } from "./door-segment.js";
 import { MAX_CELLS } from "./bounds.js";
 
 const CELL = 40;
@@ -155,7 +156,7 @@ export async function applyDD2VTT(data, mode = "merge") {
   for (const r of data.roofs || []) changes[`map/roofs/${id("r", n++)}`] = { lv: 0, ...r, ...onFloor };
   for (const p of data.props || []) changes[`map/props/${id("p", n++)}`] = { lv: 0, ...p, ...onFloor };
   for (const l of data.labels || []) changes[`map/labels/${id("l", n++)}`] = { lv: 0, ...l, ...onFloor };
-  for (const d of data.doors) if (!data.objects?.[d.id]) changes[`objects/${d.id || id("d", n++)}`] = { ...newObject("door", d.x, d.y, n, { dir: d.dir, state: d.state, mat: d.mat, doorKind: d.kind || (d.win ? "window" : "wood"), ...(d.win ? { win: true } : {}), ...(d.seg ? { seg: d.seg } : {}) }), lv: L ?? d.lv ?? 0 };
+  for (const d of data.doors) if (!data.objects?.[d.id]) changes[`objects/${d.id || id("d", n++)}`] = { ...newObject("door", d.x, d.y, n, { dir: d.dir, ...(d.len ? { len: d.len } : {}), state: d.state, mat: d.mat, doorKind: d.kind || (d.win ? "window" : "wood"), ...(d.win ? { win: true } : {}), ...(d.seg ? { seg: d.seg } : {}) }), lv: L ?? d.lv ?? 0 };
   for (const l of data.lights) if (!data.objects?.[l.id]) changes[`objects/${l.id || id("l", n++)}`] = { ...newObject("light", l.x, l.y, n, { radius: l.radius, color: l.color, fog: 0, state: "on", ...(l.intensity != null ? { intensity: l.intensity } : {}) }), lv: L ?? l.lv ?? 0 };
   for (const [oid, o] of Object.entries(data.objects || {})) changes[`objects/${oid}`] = o;
   for (const [gid, g] of Object.entries(data.groups || {})) changes[`groups/${gid}`] = g;
@@ -212,8 +213,8 @@ export async function exportDD2VTT() {
   const { cols, rows } = mapSize();
   const walls = Object.values(S.map.walls || {}).map((w) => [{ x: w.x1 / CELL, y: w.y1 / CELL }, { x: w.x2 / CELL, y: w.y2 / CELL }]);
   const doors = Object.values(S.objects || {}).filter((o) => o?.kind === "door").map((d) => {
-    const h = d.dir !== "v", x = d.x / CELL, y = d.y / CELL;
-    return { position: { x, y }, bounds: h ? [{ x: x - .5, y }, { x: x + .5, y }] : [{ x, y: y - .5 }, { x, y: y + .5 }], rotation: 0, closed: d.state !== "open" };
+    const [x1, y1, x2, y2] = doorSeg(d).map((v) => v / CELL);
+    return { position: { x: d.x / CELL, y: d.y / CELL }, bounds: [{ x: x1, y: y1 }, { x: x2, y: y2 }], rotation: 0, closed: d.state !== "open" };
   });
   const lights = Object.values(S.objects || {}).filter((o) => o?.kind === "light").map((l) => ({ position: { x: l.x / CELL, y: l.y / CELL }, range: (l.radius || 0) / CELL, color: `${String(l.color || "#ffffff").replace(/^#/, "")}ff`, ...(l.intensity != null ? { intensity: l.intensity } : {}) }));
   return new Blob([JSON.stringify({ format: 0.3, resolution: { map_origin: { x: 0, y: 0 }, map_size: { x: cols, y: rows }, pixels_per_grid: 70 }, line_of_sight: walls, objects_line_of_sight: [], portals: doors, lights, image: "" })], { type: "application/json" });

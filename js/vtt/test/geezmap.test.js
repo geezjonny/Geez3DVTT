@@ -23,7 +23,7 @@ test("parses GeezSheets map floors and objects in pixels", () => {
   ]);
   assert.deepEqual(map.roofs, [{ x: 0, y: 0, w: 80, h: 40, mat: "thatch", lv: 0 }]);
   assert.deepEqual(map.walls[0], { x1: 0, y1: 0, x2: 120, y2: 0, mat: "brick", lv: 0 });
-  assert.deepEqual(map.doors[0], { id: "d_a", x: 60, y: 0, dir: "h", state: "closed", kind: "window", doorKind: "window", mat: "wood", lv: 0, win: true });
+  assert.deepEqual(map.doors[0], { id: "d_a", x: 60, y: 0, dir: "h", len: 1, state: "closed", kind: "window", doorKind: "window", mat: "wood", lv: 0, win: true });
   assert.deepEqual(map.lights[0], { id: "l_a", x: 60, y: 60, radius: 120, color: "#ffbb77", lv: 0 });
   assert.deepEqual(map.props, [{ kind: "barrel", x: 60, y: 60, lv: 0 }]);
   assert.equal(map.skipped.props, 1);

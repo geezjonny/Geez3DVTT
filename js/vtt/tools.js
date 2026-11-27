@@ -7,7 +7,7 @@ import { el, PROPS, PROP_CATALOG, drawObjects } from "./draw.js";
 import { renderPanel } from "./panel.js";
 import { floatWindow, addBarButton, toolbar, svg } from "./ui.js";
 import { generateDungeon } from "./gen.js";
-import { cutWall, segmentDoors } from "./door-segment.js";
+import { cutWall, segmentDoors, doorKind, doorHalf } from "./door-segment.js";
 import { doorSeg } from "./reach.js";
 import { LIGHT_MATS, LIGHT_DEFAULT, lightSettings, clampIntensity, lightIntensity } from "./light-types.js";
 import { recentTokenRefs, tokenInitials, TOKEN_BASE, tokenFileName, artFor } from "./token-palette.js";
@@ -129,11 +129,13 @@ async function loadPcs() {
 let drag = null;   // wall / floor / roof being drawn, or a prop being moved
 
 // Doors sit on cell edges; everything else on cell centres.
-export function snapFor(kind, p) {
+export function snapFor(kind, p, o = {}) {
   const c = cellOf(p);
   if (kind !== "door") return { ...c };
   const dx = p.x - c.x, dy = p.y - c.y;
-  return Math.abs(dx) > Math.abs(dy) ? { x: c.x + Math.sign(dx) * 20, y: c.y, dir: "v" } : { x: c.x, y: c.y + Math.sign(dy) * 20, dir: "h" };
+  const s = Math.abs(dx) > Math.abs(dy) ? { x: c.x + Math.sign(dx) * 20, y: c.y, dir: "v" } : { x: c.x, y: c.y + Math.sign(dy) * 20, dir: "h" };
+  if (doorHalf(o) % 40 === 0) s[s.dir === "v" ? "y" : "x"] -= 20;   // an even width centres on a grid corner
+  return s;
 }
 
 // ---- build windows ------------------------------------------------------
@@ -351,7 +353,7 @@ export function cleanOverlaps() {
   const cur = new Map(Object.entries(S.map.walls || {})), changes = {}, before = cur.size; let n = 0;
   const cutAll = (a, b, lv, except) => { for (const [oid, o] of [...cur]) { if (oid === except || (o.lv ?? 0) !== lv) continue; const pieces = cutWall(o, a, b); if (!pieces) continue; cur.delete(oid); changes[`map/walls/${oid}`] = null; pieces.forEach((p, k) => { const nid = `${uid("w")}c${n++}${k}`; cur.set(nid, p); changes[`map/walls/${nid}`] = p; }); } };
   for (const [id, w] of [...cur].reverse()) if (cur.has(id)) cutAll({ x: w.x1, y: w.y1 }, { x: w.x2, y: w.y2 }, w.lv ?? 0, id);
-  for (const o of Object.values(S.objects)) { if (o.kind !== "door") continue; const v = o.dir === "v", m = (o.doorKind || o.kind) === "double" ? 40 : 20; cutAll({ x: o.x - (v ? 0 : m), y: o.y - (v ? m : 0) }, { x: o.x + (v ? 0 : m), y: o.y + (v ? m : 0) }, o.lv ?? 0, null); }
+  for (const o of Object.values(S.objects)) { if (o.kind !== "door") continue; const [x1, y1, x2, y2] = doorSeg(o); cutAll({ x: x1, y: y1 }, { x: x2, y: y2 }, o.lv ?? 0, null); }
   if (Object.keys(changes).length) patch(JSON.parse(JSON.stringify(changes)));
   return { before, after: cur.size };
 }
@@ -368,19 +370,15 @@ function placeWall(a, b, mat, extra = {}) {
   patchGrowing(changes, a, b);
 }
 function placeDoors(d) {
-  const segment = segmentDoors(d.a, d.b), cells = segment.cells;
-  if (!cells.length) return;
-  const n = Object.values(S.objects).filter((o) => o.kind === "door").length;
-  const extra = curMode === "window" ? { dir: segment.dir, doorKind: "window", win: true, mat: matOf() || "" } : { dir: segment.dir, doorKind: "wood", win: false, mat: matOf() || "" };
-  const changes = {}, reused = new Set();
-  cells.forEach((cell, i) => {
-    const dv = cell.dir === "v", a = { x: cell.x - (dv ? 0 : 20), y: cell.y - (dv ? 20 : 0) }, b = { x: cell.x + (dv ? 0 : 20), y: cell.y + (dv ? 20 : 0) };
-    wallClear(a, b, changes);
-    const under = doorsUnder(a, b), old = under.find(([id]) => !reused.has(id)), id = old?.[0] || `do${Date.now().toString(36)}${i}`;   // reusing the id keeps its connections
-    reused.add(id); for (const [other] of under) if (!reused.has(other)) changes[`objects/${other}`] = null;
-    const { seg, ...kept } = old?.[1] || newObject("door", cell.x, cell.y, n + i + 1);   // an imported line would override the new place
-    changes[`objects/${id}`] = { ...kept, x: cell.x, y: cell.y, sx: cell.x, sy: cell.y, ...extra, lv: S.level ?? 0 };
-  });
+  const door = segmentDoors(d.a, d.b).door; if (!door) return;
+  const n = Object.values(S.objects).filter((o) => o.kind === "door").length, mat = matOf() || "";
+  const extra = { ...door, doorKind: curMode === "window" ? "window" : mat === "iron" ? "iron" : "wood", win: curMode === "window", mat };
+  const [x1, y1, x2, y2] = doorSeg(door), a = { x: x1, y: y1 }, b = { x: x2, y: y2 }, changes = {};
+  wallClear(a, b, changes);
+  const under = doorsUnder(a, b), id = under[0]?.[0] || `do${Date.now().toString(36)}`;   // reusing the id keeps its connections
+  for (const [other] of under.slice(1)) changes[`objects/${other}`] = null;
+  const { seg, ...kept } = under[0]?.[1] || newObject("door", door.x, door.y, n + 1);   // an imported line would override the new place
+  changes[`objects/${id}`] = { ...kept, ...extra, sx: door.x, sy: door.y, lv: S.level ?? 0 };
   patchGrowing(changes, d.a, d.b);
 }
 const distToSeg = (p, a) => {
@@ -400,7 +398,7 @@ function placeProp(p) {
 // Right-click > Duplicate: a copy one square along (a door slides along its own line).
 export function duplicate(type, id) {
   const all = type === "token" ? S.tokens : type === "prop" ? S.map.props : S.objects, from = all?.[id]; if (!from) return;
-  const door = type === "object" && from.kind === "door", axis = door && from.dir === "v" ? "y" : "x", step = door && from.doorKind === "double" ? 80 : 40;
+  const door = type === "object" && from.kind === "door", axis = door && from.dir === "v" ? "y" : "x", step = door ? doorHalf(from) * 2 : 40;
   const m = mapSize(), low = m[axis] * 40, high = (m[axis] + (axis === "x" ? m.cols : m.rows)) * 40;
   const half = step / 2, line = (at) => (axis === "x" ? [{ x: at.x - half, y: at.y }, { x: at.x + half, y: at.y }] : [{ x: at.x, y: at.y - half }, { x: at.x, y: at.y + half }]);
   const taken = (at) => (door ? doorsUnder(...line(at)).length > 0 : Object.values(all).some((o) => (o.lv ?? 0) === (from.lv ?? 0) && o.x === at.x && o.y === at.y));
@@ -445,10 +443,9 @@ function rectOf(d) {
   const x0 = Math.min(d.a.x, d.b.x) - 20, y0 = Math.min(d.a.y, d.b.y) - 20, x1 = Math.max(d.a.x, d.b.x) + 20, y1 = Math.max(d.a.y, d.b.y) + 20;
   return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
 }
-const doorLine = (d) => [d.dir === "v" ? d.x : d.x - 20, d.dir === "v" ? d.y - 20 : d.y, d.dir === "v" ? d.x : d.x + 20, d.dir === "v" ? d.y + 20 : d.y];
 function ghostSegments() {
   if (drag.type === "wall") return [[drag.a.x, drag.a.y, drag.b.x, drag.b.y]];
-  if (drag.type === "door") return segmentDoors(drag.a, drag.b).cells.map(doorLine);
+  if (drag.type === "door") { const { door } = segmentDoors(drag.a, drag.b); return door ? [doorSeg(door)] : []; }
   const { x, y, w, h } = rectOf(drag);
   return [[x, y, x + w, y], [x + w, y, x + w, y + h], [x + w, y + h, x, y + h], [x, y + h, x, y]];
 }
@@ -524,7 +521,7 @@ export function settingsFor(type, id) {
     F("Clears fog (cells)", base + "fog", o.fog ?? 2, { type: "number", min: 0, max: 12 }),
     F("Intensity", base + "intensity", lightIntensity(o), { type: "range", min: .2, max: 1.5, step: .05, to: clampIntensity })] };
   const f = [L];
-  if (o.kind === "door") f.push(F("Kind", base + "doorKind", o.doorKind || (o.win ? "window" : "wood"), { opts: [["wood", "wood"], ["iron", "iron"], ["double", "double"], ["portcullis", "portcullis"], ["bars", "bars"], ["secret", "secret"], ["arch", "arch"], ["curtain", "curtain"], ["window", "window"]] }), F("Material", base + "mat", o.mat || "", { opts: matOpts(WALL_MATS) }), F("Direction", base + "dir", o.dir || "h", { opts: [["h", "horizontal"], ["v", "vertical"]] }));
+  if (o.kind === "door") f.push(F("Kind", base + "doorKind", doorKind(o), { opts: [["wood", "wood"], ["iron", "iron"], ["double", "double"], ["portcullis", "portcullis"], ["bars", "bars"], ["secret", "secret"], ["arch", "arch"], ["curtain", "curtain"], ["window", "window"]] }), F("Material", base + "mat", o.mat || "", { opts: matOpts(WALL_MATS) }), F("Direction", base + "dir", o.dir || "h", { opts: [["h", "horizontal"], ["v", "vertical"]] }));
   if (o.kind === "tripwire") f.push(F("Length", base + "len", o.len || 3, { type: "number", min: 1, max: 10 }), F("Direction", base + "dir", o.dir || "h", { opts: [["h", "across"], ["v", "down"]] }));
   if (o.kind === "plate" || o.kind === "tripwire") f.push(F("Stays down", base + "latch", !!o.latch, { type: "check" }));
   if (o.kind === "sight") f.push(F("Sees", base + "sees", o.sees || "player", { opts: [["player", "players"], ["npc", "NPCs / enemies"]] }), F("Range (cells)", base + "range", o.range || 6, { type: "number", min: 1, max: 30 }), F("Stays triggered", base + "latch", !!o.latch, { type: "check" }));

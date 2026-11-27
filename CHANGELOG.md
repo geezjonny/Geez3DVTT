@@ -4,6 +4,12 @@ What changed in Geez3DVTT, newest first.
 
 ## 2026-11-27
 
+### Doors
+- **A drag makes one door** as long as the drag, instead of a row of one-square doors. Windows work the same way.
+- **Iron doors draw as iron**, including ones already placed with the iron material.
+- **Every door type has its own 3D model:** riveted iron, two-leaf double doors, a portcullis that lifts, a swinging barred
+  gate (it no longer lifts), a stepped arch, a curtain that draws aside, and slabs for stone, brick and other materials.
+
 ### Stealth (optional)
 - **Stealth mode** is a GM switch (crossed-out eye in VTT Controls); nothing changes while it is off.
 - Right-click an NPC token and **Tag as guard**. Guards patrol points you set, sweep, open unlocked doors, see in a

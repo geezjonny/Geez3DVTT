@@ -1,4 +1,5 @@
 // Drawing: map objects, tokens. Reads shared state from state.js.
+import { doorKind, doorHalf, doorSeg } from "./door-segment.js";
 import { $, S, mapSize } from "./state.js";
 import { CONDITIONS, conditionsOf } from "./conditions.js";
 import { put } from "./undo.js";
@@ -24,10 +25,10 @@ function drawObject(id, o, layer) {
   const g = el("g", { class: `obj ${o.kind} state-${o.state} ${o.kind === "light" ? "light-" + o.state : ""} ${S.selected.has(id) ? "sel" : ""} ${o.hidden ? "hidden-obj" : ""} ${o.locked ? "locked" : ""}`, "data-id": id }, layer);
   if (o.kind === "door") {
     const v = o.dir === "v";
-    const dk = o.doorKind || o.kindName || (o.win ? "window" : "wood"), n = dk === "double" ? 40 : 20, [x1, y1, x2, y2] = o.seg || [o.x - (v ? 0 : n), o.y - (v ? n : 0), o.x + (v ? 0 : n), o.y + (v ? n : 0)], cls = dk === "window" || o.win ? "windowbar" : `doorbar ${o.mat ? "m-" + o.mat : ""}`;
+    const dk = doorKind(o), n = doorHalf(o), [x1, y1, x2, y2] = doorSeg(o), mat = dk === "iron" ? "iron" : o.mat, cls = dk === "window" || o.win ? "windowbar" : `doorbar ${mat ? "m-" + mat : ""}`;
     el("line", { x1, x2, y1, y2, class: "doorgap" }, g);
     if (dk === "portcullis" || dk === "bars") { for (let i = -n + 7; i < n; i += 8) el("line", v ? { x1: o.x - 7, x2: o.x + 7, y1: o.y + i, y2: o.y + i, class: cls } : { x1: o.x + i, x2: o.x + i, y1: o.y - 7, y2: o.y + 7, class: cls }, g); }
-    else if (dk === "arch") { el("path", { d: v ? `M${o.x - 12} ${o.y - 20} Q${o.x} ${o.y - 32} ${o.x + 12} ${o.y - 20}` : `M${o.x - 20} ${o.y - 12} Q${o.x} ${o.y} ${o.x + 20} ${o.y - 12}`, class: "doorbar" }, g); }
+    else if (dk === "arch") { el("path", { d: v ? `M${o.x - 12} ${o.y - n} Q${o.x} ${o.y - n - 12} ${o.x + 12} ${o.y - n}` : `M${o.x - n} ${o.y - 12} Q${o.x} ${o.y} ${o.x + n} ${o.y - 12}`, class: "doorbar" }, g); }
     else if (dk === "curtain") { el("line", { x1, x2, y1, y2, class: "curtaindoor" }, g); }
     else if (dk === "secret") { el("line", { x1, x2, y1, y2, class: "secretdoor" }, g); }
     else el("line", { x1, x2, y1, y2, class: cls }, g);
@@ -140,7 +141,7 @@ export function wallPieces(w, doors) {
   const vert = w.x1 === w.x2, horiz = w.y1 === w.y2, whole = [[w.x1, w.y1, w.x2, w.y2]];
   if (!vert && !horiz) return whole;
   const ax = vert ? "y" : "x", fixed = vert ? w.x1 : w.y1, a0 = Math.min(w[ax + "1"], w[ax + "2"]), a1 = Math.max(w[ax + "1"], w[ax + "2"]);
-  const cuts = doors.filter((o) => !o.seg && (o.dir === "v") === vert && (vert ? o.x : o.y) === fixed).map((o) => { const n = (o.doorKind || o.kind) === "double" ? 40 : 20; return [o[ax] - n, o[ax] + n]; }).filter(([s, e]) => e > a0 && s < a1).sort((p, q) => p[0] - q[0]);
+  const cuts = doors.filter((o) => !o.seg && (o.dir === "v") === vert && (vert ? o.x : o.y) === fixed).map((o) => { const n = doorHalf(o); return [o[ax] - n, o[ax] + n]; }).filter(([s, e]) => e > a0 && s < a1).sort((p, q) => p[0] - q[0]);
   if (!cuts.length) return whole;
   const out = [], mk = (s, e) => out.push(vert ? [fixed, s, fixed, e] : [s, fixed, e, fixed]); let at = a0;
   for (const [s, e] of cuts) { if (s > at) mk(at, s); at = Math.max(at, e); }

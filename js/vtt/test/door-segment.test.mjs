@@ -1,25 +1,32 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { cutWall, segmentDoors } from "../door-segment.js";
+import { cutWall, segmentDoors, doorKind, doorHalf, doorSeg } from "../door-segment.js";
 
-test("snaps diagonal input to its dominant axis and computes horizontal doors", () => {
+test("snaps diagonal input to its dominant axis", () => {
   const s = segmentDoors({ x: 0, y: 0 }, { x: 125, y: 70 });
   assert.equal(s.dir, "h");
   assert.deepEqual([s.x2, s.y2], [125, 0]);
-  assert.deepEqual(s.cells, [{ x: 20, y: 0, dir: "h" }, { x: 60, y: 0, dir: "h" }, { x: 100, y: 0, dir: "h" }]);
+  assert.deepEqual(s.door, { x: 60, y: 0, dir: "h", len: 3 });
 });
 
-test("vertical segments have one door per cell edge", () => {
+test("a dragged vertical line is one door as long as the drag", () => {
   const s = segmentDoors({ x: 80, y: 40 }, { x: 80, y: 160 });
   assert.equal(s.dir, "v");
-  assert.deepEqual(s.cells, [{ x: 80, y: 60, dir: "v" }, { x: 80, y: 100, dir: "v" }, { x: 80, y: 140, dir: "v" }]);
+  assert.deepEqual(s.door, { x: 80, y: 100, dir: "v", len: 3 });
+  assert.deepEqual(doorSeg(s.door), [80, 40, 80, 160]);
 });
 
-test("zero length places no doors and reversing preserves the edge count", () => {
-  assert.deepEqual(segmentDoors({ x: 40, y: 40 }, { x: 40, y: 40 }).cells, []);
-  const s = segmentDoors({ x: 120, y: 0 }, { x: 0, y: 0 });
-  assert.equal(s.dir, "h");
-  assert.deepEqual(s.cells.map((c) => c.x), [100, 60, 20]);
+test("zero length places no door and reversing preserves the length", () => {
+  assert.equal(segmentDoors({ x: 40, y: 40 }, { x: 40, y: 40 }).door, null);
+  assert.deepEqual(segmentDoors({ x: 120, y: 0 }, { x: 0, y: 0 }).door, { x: 60, y: 0, dir: "h", len: 3 });
+});
+
+test("iron material makes an iron door, and doubles are at least two wide", () => {
+  assert.equal(doorKind({ doorKind: "wood", mat: "iron" }), "iron");
+  assert.equal(doorKind({ doorKind: "bars", mat: "iron" }), "bars");
+  assert.equal(doorHalf({ doorKind: "double" }), 40);
+  assert.equal(doorHalf({ doorKind: "double", len: 5 }), 100);
+  assert.equal(doorHalf({}), 20);
 });
 
 test("a new wall or door covers what lies under it, even slightly off the grid", () => {

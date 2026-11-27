@@ -41,6 +41,7 @@ import { initMapImage } from "./mapimg.js";
 import { initRefImage } from "./refimage.js";
 import { initReplace, openReplace } from "./replace.js";
 import { addBarButton, dropMenu, toolbar, floatWindow } from "./ui.js";
+import { doorSeg } from "./door-segment.js";
 import { drawObjects, drawTokens, drawTray, drawMap, drawWalls, isPcToken, doorsList, wallPieces, PROPS } from "./draw.js";
 import { propParts } from "./propmodels.js";
 import { canReach } from "./reach.js";
@@ -129,7 +130,7 @@ watch("events/last", (e) => { if (S.isGM && e && e.t > loadedAt) { const t = $("
 // Only the GM client runs the rules, so two clients never race.
 function afterChange() {
   if (!S.isGM) return;
-  const doors = doorsList().filter(d => (d.lv ?? 0) === (S.level ?? 0)), blockers = [...Object.values(S.map.walls || {}).filter(w => (w.lv ?? 0) === (S.level ?? 0) && !w.hidden).flatMap((w) => wallPieces(w, doors)), ...doors.filter((d) => !d.win && !["window", "bars", "portcullis", "arch"].includes(d.doorKind || d.kindName) && d.state !== "open").map((d) => d.dir === "v" ? [d.x, d.y - 20, d.x, d.y + 20] : [d.x - 20, d.y, d.x + 20, d.y])];
+  const doors = doorsList().filter(d => (d.lv ?? 0) === (S.level ?? 0)), blockers = [...Object.values(S.map.walls || {}).filter(w => (w.lv ?? 0) === (S.level ?? 0) && !w.hidden).flatMap((w) => wallPieces(w, doors)), ...doors.filter((d) => !d.win && !["window", "bars", "portcullis", "arch"].includes(d.doorKind || d.kindName) && d.state !== "open").map(doorSeg)];
   const changes = evaluate({ objects: S.objects, groups: S.groups, tokens: S.tokens, blockers, props: S.map.props, walls: S.map.walls });
   if (Object.keys(changes).length) rawPatch(changes);
 }
@@ -185,7 +186,7 @@ map.addEventListener("pointermove", (e) => {
   if (objDrag) {
     const p = mapPoint(e);
     if (Math.hypot(p.x - objDrag.x0, p.y - objDrag.y0) > 6) objDrag.moved = true;
-    if (objDrag.moved) { const s = snapFor(S.objects[objDrag.id].kind, p), o = S.objects[objDrag.id];
+    if (objDrag.moved) { const s = snapFor(S.objects[objDrag.id].kind, p, S.objects[objDrag.id]), o = S.objects[objDrag.id];
       objDrag.snap = s; objDrag.el.setAttribute("transform", `translate(${s.x - o.x} ${s.y - o.y})`); }
     return;
   }

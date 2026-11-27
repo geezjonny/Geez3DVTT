@@ -1,3 +1,4 @@
+import { doorKind, doorHalf } from "./door-segment.js";
 // GeezMapper export: the VTT's scene state -> one `.geezmap.json` that is ALSO a Universal VTT (.dd2vtt).
 // Pure (no DOM, no Firebase) so it runs in Node tests. The geezmap half is what geezmap.js `parseGeezMap` reads;
 // the dd2vtt half (resolution / line_of_sight / portals / lights / image) is what any dd2vtt reader or
@@ -40,7 +41,7 @@ export function floorRecord(state, lv, opts = {}) {
   entries(objects).forEach(([id, o], i) => {
     if (lvOf(o) !== lv) return;
     if (o.kind === "door") {
-      const kind = DOOR_KINDS.has(o.doorKind) ? o.doorKind : o.win ? "window" : "wood", half = kind === "double" ? 1 : 0.5, h = o.dir !== "v";
+      const kind = DOOR_KINDS.has(doorKind(o)) ? doorKind(o) : o.win ? "window" : "wood", half = doorHalf(o) / CELL, h = o.dir !== "v";
       const cx = num(o.x) / CELL, cy = num(o.y) / CELL, r = Math.round;
       doors["d" + i] = h ? { x1: r(cx - half), y1: r(cy), x2: r(cx + half), y2: r(cy), mat: WALLS.has(o.mat) ? o.mat : "wood", kind } : { x1: r(cx), y1: r(cy - half), x2: r(cx), y2: r(cy + half), mat: WALLS.has(o.mat) ? o.mat : "wood", kind };
     } else if (o.kind === "light") lights["l" + i] = { x: g(o.x), y: g(o.y), range: Math.max(1, g(o.radius)), color: "#" + hex6(o.color), ...(o.intensity != null ? { intensity: o.intensity } : {}) };

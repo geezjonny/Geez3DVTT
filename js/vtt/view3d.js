@@ -12,6 +12,7 @@ import { visibleToPlayer } from "./visibility.js";
 import { isCurrentlyVisible } from "./explored-vtt.js";
 import { getRefImage } from "./refimage.js";
 import { doorSeg } from "./reach.js";
+import { doorKind } from "./door-segment.js";
 import { CONDITIONS, conditionsOf } from "./conditions.js";
 import { propParts } from "./propmodels.js";
 import { SOURCES, statesOf, startOf } from "../puzzle/objects.js";
@@ -212,6 +213,7 @@ const random = (seed) => () => { seed = (seed + 0x6d2b79f5) | 0; let t = Math.im
 const dummy = new THREE.Object3D();
 const matrix = (x, y, z, ry, sx, sy, sz) => { dummy.position.set(x, y, z); dummy.rotation.set(0, ry, 0); dummy.scale.set(sx, sy, sz); dummy.updateMatrix(); return dummy.matrix.clone(); };
 const along = (dx, dz) => Math.atan2(-dz, dx); // rotation about Y that points local +x along (dx, dz)
+const part = ([x1, z1, x2, z2], a, b) => [x1 + (x2 - x1) * a, z1 + (z2 - z1) * a, x1 + (x2 - x1) * b, z1 + (z2 - z1) * b];
 const onSeg = ([x1, z1, x2, z2], y, h, thick, shrink = 1) => matrix((x1 + x2) / 2, y, (z1 + z2) / 2, along(x2 - x1, z2 - z1), Math.hypot(x2 - x1, z2 - z1) * shrink, h, thick);
 function instances(geo, material, list, { shadows = true, into = world } = {}) {
   if (!list.length) { geo.dispose(); material.dispose(); return null; }
@@ -450,6 +452,13 @@ function buildWalls(H) {
   const post = (x, z, r, h) => { const c = stone(x, z, rnd), spin = rnd() * 6; posts.push({ m: matrix(x, h / 2, z, spin, r, h, r), c }); spires.push({ m: matrix(x, h + 0.13 * r, z, spin, r, r, r), c: c.clone().multiplyScalar(0.75) }); };
   for (const { x, z, dirs } of joints.values()) if (dirs.length !== 2 || dirs[0][0] * dirs[1][0] + dirs[0][1] * dirs[1][1] > -0.9) post(x, z, 1, H + 0.16);
   for (const d of data.doors) if (d.kind !== "secret") { post(d.seg[0], d.seg[1], 0.85, H + 0.2); post(d.seg[2], d.seg[3], 0.85, H + 0.2); }
+  for (const d of data.doors.filter((d) => d.kind === "arch")) { // an open archway: lintel and two stepped shoulders
+    const [x1, z1, x2, z2] = d.seg, len = Math.hypot(x2 - x1, z2 - z1), c = stone((x1 + x2) / 2, (z1 + z2) / 2, rnd, d.o.mat);
+    const add = (from, to, y, h) => blocks.push({ m: onSeg(part(d.seg, from, to), H * y, H * h, THICK * 1.05), c });
+    add(0, 1, 0.95, 0.14);
+    for (const [w, y] of [[0.6, 0.83], [0.38, 0.72], [0.24, 0.61]]) { add(0, w / len, y, 0.11); add(1 - w / len, 1, y, 0.11); }
+  }
+  for (const d of data.doors.filter((d) => d.kind === "curtain")) blocks.push({ m: onSeg(d.seg, H * 0.98, 0.05, 0.05), c: new THREE.Color(0x6b5430) }); // the rod
   for (const d of data.doors.filter((d) => d.window)) { // windows share the stone: sill and lintel
     const x = (d.seg[0] + d.seg[2]) / 2, z = (d.seg[1] + d.seg[3]) / 2;
     blocks.push({ m: onSeg(d.seg, H * 0.18, H * 0.36, THICK * 1.05), c: stone(x, z, rnd) });
@@ -462,36 +471,61 @@ function buildWalls(H) {
 
 let leaves = [];
 const swings = new Map(); // door id -> current swing, kept across rebuilds so doors animate
-const isOpenDoor = (o) => !!o && (o.state === "open" || (o.doorKind || o.kindName) === "arch");
+const isOpenDoor = (o) => !!o && (o.state === "open" || doorKind(o) === "arch");
 const doorOpen = (id) => isOpenDoor(S.objects[id]);
-const lifts = (d) => d.kind === "portcullis" || d.kind === "bars";
-function doorMatrix(d, H) {
+const lifts = (d) => d.kind === "portcullis";
+const seeThrough = (d) => d.kind === "portcullis" || d.kind === "bars";
+function doorMatrix(d, H, side = 0) { // side: the second leaf of a double door, hinged at the far end
   const [x1, z1, x2, z2] = d.seg, dx = x2 - x1, dz = z2 - z1, s = swings.get(d.id) || 0, len = Math.hypot(dx, dz);
-  return lifts(d) ? matrix(x1, s * H * 0.85, z1, along(dx, dz), len, H * 0.95, 0.07) : matrix(x1, 0, z1, along(dx, dz) + s * 1.75, len, H * 0.95, 0.12);
+  if (lifts(d)) return matrix(x1, s * H * 0.85, z1, along(dx, dz), len, H * 0.95, 0.07);
+  if (d.kind === "curtain") return matrix(x1, 0, z1, along(dx, dz), len * (1 - s * 0.8), H * 0.95, 0.12); // drawn aside
+  if (d.kind !== "double") return matrix(x1, 0, z1, along(dx, dz) + s * 1.75, len, H * 0.95, 0.12);
+  return side ? matrix(x2, 0, z2, along(-dx, -dz) - s * 1.75, len / 2, H * 0.95, 0.12) : matrix(x1, 0, z1, along(dx, dz) + s * 1.75, len / 2, H * 0.95, 0.12);
+}
+// What a door leaf is made of.
+function doorStyle(d) {
+  if (["portcullis", "bars", "curtain"].includes(d.kind)) return d.kind;
+  if (d.kind === "iron" || d.o.mat === "iron") return "iron";
+  return d.o.mat && !["wood", "timber", "palisade"].includes(d.o.mat) && WALL_COL[d.o.mat] ? d.o.mat : "wood";
+}
+// One leaf, 1 long and 1 high; n is its width in squares, so details repeat instead of stretching.
+function doorLeaf(style, n) {
+  const box = (w, h, t, c, x, y, z = 0) => part3(new THREE.BoxGeometry(w, h, t), c, x, y, z);
+  const row = (count, make) => { const k = Math.max(1, Math.round(count)); return Array.from({ length: k }, (_, i) => make((i + 0.5) / k, i, k)).flat(); };
+  const rings = () => [-0.85, 0.85].map((z) => part3(new THREE.TorusGeometry(0.065, 0.016, 4, 8).scale(1 / n, 1, 1), 0x8a6a34, 1 - 0.2 / n, 0.46, z));
+  if (style === "curtain") return merged(row(5 * n, (x, i, count) => box(0.95 / count, 0.96, 0.5, i % 2 ? 0x5c1f3a : 0x6e2746, x, 0.5, i % 2 ? 0.3 : -0.3)));
+  if (style === "portcullis") return merged([...row(6 * n, (x) => [box(0.05 / n, 0.94, 1, 0x2b2f38, x, 0.53), part3(new THREE.ConeGeometry(0.045, 0.09, 4).rotateX(Math.PI).scale(1 / n, 1, 1), 0x8a8f96, x, 0.015, 0)]), ...[0.2, 0.45, 0.7, 0.95].map((y) => box(1, 0.05, 1.1, 0x2b2f38, 0.5, y))]);
+  if (style === "bars") return merged([...row(7 * n, (x) => box(0.028 / n, 0.96, 0.4, 0x6a7078, x, 0.5)), ...[0.04, 0.5, 0.96].map((y) => box(1, 0.05, 0.8, 0x3a3f48, 0.5, y)),
+    ...[0.02, 0.98].map((x) => box(0.045 / n, 0.98, 0.8, 0x3a3f48, x < 0.5 ? 0.025 / n : 1 - 0.025 / n, 0.5)), box(0.1 / n, 0.12, 1.2, 0x23262c, 1 - 0.12 / n, 0.5)]);
+  if (style === "iron") return merged([box(1, 0.98, 0.8, 0x4d5964, 0.5, 0.5),
+    ...[0.08, 0.5, 0.92].flatMap((y) => [box(1, 0.07, 1.2, 0x2a2f37, 0.5, y), ...row(8 * n, (x) => box(0.03 / n, 0.028, 1.5, 0x9aa2aa, x, y))]),
+    ...Array.from({ length: Math.round(2 * n) + 1 }, (_, i) => box(0.045 / n, 0.98, 1.1, 0x353c45, clamp(i / Math.round(2 * n), 0.025 / n, 1 - 0.025 / n), 0.5)),
+    box(0.26 / n, 0.15, 1.15, 0x0d0e12, 0.5, 0.72), ...[-0.07, 0, 0.07].map((x) => box(0.018 / n, 0.15, 1.4, 0x9aa2aa, 0.5 + x / n, 0.72)), ...rings()]);
+  if (style !== "wood") { const base = new THREE.Color(WALL_COL[style]), shade = (k) => base.clone().multiplyScalar(k).getHex(); // a slab of the chosen material
+    return merged([box(1, 0.98, 1, shade(1), 0.5, 0.5), ...row(n, (x, i, count) => box(0.7 / count, 0.7, 1.35, shade(0.75), x, 0.5)), ...rings()]); }
+  return merged([...row(4 * n, (x, i, count) => box(0.94 / count, 0.98, 1, [0x3d2a1c, 0x32231a, 0x45301f, 0x37261a][i % 4], x, 0.5)),
+    ...[0.2, 0.76].flatMap((y) => [box(0.96, 0.08, 1.4, 0x1d1f25, 0.5, y), ...row(4 * n, (x) => box(0.035 / n, 0.035, 1.8, 0x6b6258, x, y))]), ...rings()]);
 }
 function buildDoors(H) {
   const real = data.doors.filter((d) => !d.window && !["arch", "secret"].includes(d.kind));
   for (const d of data.doors) if (!swings.has(d.id)) swings.set(d.id, doorOpen(d.id) ? 1 : 0);
-  const plank = (iron) => {
-    const planks = [0x3d2a1c, 0x32231a, 0x45301f, 0x37261a].map((c, i) => part3(new THREE.BoxGeometry(0.235, 0.98, 1), iron ? 0x2a2e36 : c, 0.125 + i * 0.25, 0.5, 0));
-    const bands = [0.2, 0.76].map((y) => part3(new THREE.BoxGeometry(0.96, 0.08, 1.4), 0x1d1f25, 0.5, y, 0));
-    const studs = [0.2, 0.76].flatMap((y) => [0.12, 0.37, 0.63, 0.88].map((x) => part3(new THREE.BoxGeometry(0.035, 0.035, 1.8), 0x6b6258, x, y, 0)));
-    const rings = [-0.85, 0.85].map((z) => part3(new THREE.TorusGeometry(0.065, 0.016, 4, 8), 0x8a6a34, 0.8, 0.46, z));
-    return merged([...planks, ...bands, ...studs, ...rings]);
-  };
-  const curtain = () => merged([0, 1, 2, 3, 4].map((i) => part3(new THREE.BoxGeometry(0.19, 0.96, 0.5), i % 2 ? 0x5c1f3a : 0x6e2746, 0.1 + i * 0.2, 0.5, i % 2 ? 0.3 : -0.3)));
-  const grille = () => merged([...[0, 1, 2, 3, 4, 5].map((i) => part3(new THREE.BoxGeometry(0.05, 1, 1), 0x2b2f38, 0.04 + i * 0.184, 0.5, 0)), ...[0.15, 0.5, 0.85].map((y) => part3(new THREE.BoxGeometry(1, 0.05, 1.1), 0x2b2f38, 0.5, y, 0))]);
   leaves = [];
-  const group = (list, geo) => {
-    const mesh = instances(geo, lit(new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true })), list.map((d) => ({ m: doorMatrix(d, H) })));
-    if (mesh) { mesh.frustumCulled = false; list.forEach((d, i) => leaves.push({ d, mesh, i })); }
-  };
-  group(real.filter((d) => !lifts(d) && !["iron", "curtain"].includes(d.kind)), plank(false));
-  group(real.filter((d) => d.kind === "iron"), plank(true));
-  group(real.filter((d) => d.kind === "curtain"), curtain());
-  group(real.filter(lifts), grille());
+  const groups = new Map(); // one draw per look and leaf width
+  for (const d of real) {
+    const sides = d.kind === "double" ? [0, 1] : [0], n = Math.max(0.5, Math.round(Math.hypot(d.seg[2] - d.seg[0], d.seg[3] - d.seg[1]) / sides.length * 2) / 2), style = doorStyle(d), key = `${style} ${n}`;
+    if (!groups.has(key)) groups.set(key, { style, n, list: [] });
+    for (const side of sides) groups.get(key).list.push({ d, side });
+  }
+  for (const { style, n, list } of groups.values()) {
+    const mesh = instances(doorLeaf(style, n), lit(new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true })), list.map(({ d, side }) => ({ m: doorMatrix(d, H, side) })));
+    mesh.frustumCulled = false; list.forEach(({ d, side }, i) => leaves.push({ d, side, mesh, i }));
+  }
   const panes = [];
-  for (const d of data.doors.filter((d) => d.window && !doorOpen(d.id))) panes.push({ m: onSeg(d.seg, H * 0.6, H * 0.48, 0.04, 0.96) }, { m: onSeg(d.seg, H * 0.6, H * 0.48, 0.1, 0.04) });
+  for (const d of data.doors.filter((d) => d.window && !doorOpen(d.id))) {
+    const len = Math.hypot(d.seg[2] - d.seg[0], d.seg[3] - d.seg[1]);
+    panes.push({ m: onSeg(d.seg, H * 0.6, H * 0.48, 0.04, 0.96) }, { m: onSeg(d.seg, H * 0.6, H * 0.04, 0.1, 0.96) });
+    for (let i = 1; i < Math.round(len); i++) panes.push({ m: onSeg(part(d.seg, i / len - 0.025 / len, i / len + 0.025 / len), H * 0.6, H * 0.48, 0.1) });
+  }
   instances(boxGeo(1, 1, 1), lit(new THREE.MeshLambertMaterial({ color: 0x2a3648, emissive: 0x40200a, transparent: true, opacity: 0.75, depthWrite: false })), panes, { shadows: false });
 }
 
@@ -593,7 +627,7 @@ function disposeTree(t) {
 // The doors, walls and secret doors of one floor, in cells.
 function plan(lv) {
   const doors = Object.entries(S.objects).filter(([, o]) => o.kind === "door" && lvOf(o) === lv && Number.isFinite(o.x)).map(([id, o]) => ({
-    id, o, kind: o.doorKind || o.kindName || (o.win ? "window" : "wood"), window: !!(o.win || o.doorKind === "window"), seg: doorSeg(o).map((v) => v / U)
+    id, o, kind: doorKind(o), window: !!(o.win || o.doorKind === "window"), seg: doorSeg(o).map((v) => v / U)
   }));
   const cutters = doors.map((d) => d.o), walls = [], gone = [];   // hidden walls block nothing; only the GM sees them
   for (const [id, w] of Object.entries(S.map.walls || {})) if (lvOf(w) === lv) for (const p of wallPieces(w, cutters)) (w.hidden ? gone : walls).push({ id, mat: w.mat, seg: p.map((v) => v / U) });
@@ -634,7 +668,7 @@ function buildOtherFloor(lv, bottom) {
   const p = plan(lv), blocks = [], rnd = random(lv * 13 + 5), flat = { shadows: false, into: shell };
   for (const w of p.walls) blocks.push({ m: onSeg(w.seg, H / 2, H, THICK), c: new THREE.Color(WALL_COL[w.mat] ?? 0x6d6a76).multiplyScalar(0.85 + rnd() * 0.3) });
   for (const d of p.doors) if (d.window) blocks.push({ m: onSeg(d.seg, H * 0.18, H * 0.36, THICK), c: new THREE.Color(0x6d6a76) });
-    else if (!isOpenDoor(d.o) && d.kind !== "secret") blocks.push({ m: onSeg(d.seg, H * 0.47, H * 0.94, 0.12), c: new THREE.Color(0x5a3a22) });
+    else if (!isOpenDoor(d.o) && d.kind !== "secret") blocks.push({ m: onSeg(d.seg, H * 0.47, H * 0.94, 0.12), c: new THREE.Color({ iron: 0x4d5964, bars: 0x3a3f48, portcullis: 0x2b2f38, curtain: 0x6e2746 }[doorStyle(d)] ?? WALL_COL[doorStyle(d)] ?? 0x5a3a22) });
   instances(boxGeo(1, 1, 1), faded(new THREE.MeshLambertMaterial({ flatShading: true })), blocks, flat);
   if (above) return;
   root = shell;
@@ -712,7 +746,7 @@ const lightCanvas = document.createElement("canvas"), polys = new Map();
 let lightSig = "", wallKeyNow = "";
 function bakeLights() {
   const { cols, rows, x: x0, y: y0 } = mapSize();
-  const closed = data.doors.filter((d) => !d.window && !doorOpen(d.id) && !lifts(d)).map((d) => d.seg);
+  const closed = data.doors.filter((d) => !d.window && !doorOpen(d.id) && !seeThrough(d)).map((d) => d.seg);
   const walls = data.walls.filter((w) => !w.door).map((w) => w.seg).concat(closed);
   const lights = data.lights;
   const wallKey = JSON.stringify(walls), sig = wallKey + JSON.stringify(lights) + [cols, rows, x0, y0] + level;
@@ -1040,11 +1074,12 @@ function loop(now) {
   if (pending) refresh();
   for (const a of anims) a();
   let moving = false;
-  for (const { d, mesh, i } of leaves) {
+  const stepped = new Map(); // both leaves of a double door share one swing
+  for (const { d, side, mesh, i } of leaves) {
     const to = doorOpen(d.id) ? 1 : 0, at = swings.get(d.id) || 0;
-    if (at === to) continue;
-    swings.set(d.id, Math.abs(to - at) < 0.01 ? to : at + (to - at) * Math.min(1, dt * 9));
-    mesh.setMatrixAt(i, doorMatrix(d, WALL_H)); mesh.instanceMatrix.needsUpdate = true; moving = true;
+    if (at === to && !stepped.has(d.id)) continue;
+    if (!stepped.has(d.id)) { stepped.set(d.id, true); swings.set(d.id, Math.abs(to - at) < 0.01 ? to : at + (to - at) * Math.min(1, dt * 9)); }
+    mesh.setMatrixAt(i, doorMatrix(d, WALL_H, side)); mesh.instanceMatrix.needsUpdate = true; moving = true;
   }
   if (moving) renderer.shadowMap.needsUpdate = true;
   if (easeFog(dt)) moving = true;

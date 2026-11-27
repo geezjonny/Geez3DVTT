@@ -1,3 +1,4 @@
+import { doorSeg } from "./door-segment.js";
 const EPSILON = 1e-7;
 const ANGLE_EPSILON = 1e-7;
 const CIRCLE_STEPS = 64;
@@ -90,7 +91,7 @@ export function blockingSegments(walls = {}, doors = [], cut, level = null) {
     if (!door || (level != null && (door.lv ?? 0) !== level)) continue;
     const kind = door.doorKind || door.kindName || door.kind;
     if (door.win || kind === "window" || kind === "bars" || kind === "portcullis" || kind === "arch" || door.state === "open" || !Number.isFinite(door.x) || !Number.isFinite(door.y)) continue;
-    result.push(door.seg ? door.seg : door.dir === "v" ? [door.x, door.y - 20, door.x, door.y + 20] : [door.x - 20, door.y, door.x + 20, door.y]);
+    result.push(doorSeg(door));
   }
   return result;
 }
