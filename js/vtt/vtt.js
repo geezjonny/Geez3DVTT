@@ -2,7 +2,7 @@
 import { watch, watchAt, read, readAt, txnAt, put as rawPut, patch as rawPatch } from "../store.js";
 import { put, patch } from "./undo.js";
 import { play } from "./fx/fx.js";
-import { KINDS, statesOf, evaluate, onFired, newObject, demo, demoMap } from "../puzzle/index.js";
+import { KINDS, SOURCES, behaviorsFor, statesOf, evaluate, onFired, newObject, demo, demoMap } from "../puzzle/index.js";
 import { $, S, cellOf } from "./state.js";
 import { initWalk } from "./walk.js";
 // Players walk their own token smoothly with WASD / arrow keys: see walk.js.
@@ -41,8 +41,9 @@ import { initMapImage } from "./mapimg.js";
 import { initRefImage } from "./refimage.js";
 import { initReplace, openReplace } from "./replace.js";
 import { addBarButton, dropMenu, toolbar, floatWindow } from "./ui.js";
-import { drawObjects, drawTokens, drawTray, drawMap, drawWalls, isPcToken, doorsList, wallPieces } from "./draw.js";
-import { initTools, snapFor, toolDown, toolMove, toolUp, roofAt, fogAt, wallAt, floorAt, settingsFor } from "./tools.js";
+import { drawObjects, drawTokens, drawTray, drawMap, drawWalls, isPcToken, doorsList, wallPieces, PROPS } from "./draw.js";
+import { propParts } from "./propmodels.js";
+import { initTools, setTool, snapFor, toolDown, toolMove, toolUp, roofAt, fogAt, wallAt, floorAt, settingsFor } from "./tools.js";
 import { renderPanel, openLogic } from "./panel.js";
 import { initAttack, attackOptions, beginAttack, sheetOf } from "./attack.js";
 import "./talk.js";
@@ -126,8 +127,8 @@ watch("events/last", (e) => { if (S.isGM && e && e.t > loadedAt) { const t = $("
 // Only the GM client runs the rules, so two clients never race.
 function afterChange() {
   if (!S.isGM) return;
-  const doors = doorsList().filter(d => (d.lv ?? 0) === (S.level ?? 0)), blockers = [...Object.values(S.map.walls || {}).filter(w => (w.lv ?? 0) === (S.level ?? 0)).flatMap((w) => wallPieces(w, doors)), ...doors.filter((d) => !d.win && !["window", "bars", "portcullis", "arch"].includes(d.doorKind || d.kindName) && d.state !== "open").map((d) => d.dir === "v" ? [d.x, d.y - 20, d.x, d.y + 20] : [d.x - 20, d.y, d.x + 20, d.y])];
-  const changes = evaluate({ objects: S.objects, groups: S.groups, tokens: S.tokens, blockers });
+  const doors = doorsList().filter(d => (d.lv ?? 0) === (S.level ?? 0)), blockers = [...Object.values(S.map.walls || {}).filter(w => (w.lv ?? 0) === (S.level ?? 0) && !w.hidden).flatMap((w) => wallPieces(w, doors)), ...doors.filter((d) => !d.win && !["window", "bars", "portcullis", "arch"].includes(d.doorKind || d.kindName) && d.state !== "open").map((d) => d.dir === "v" ? [d.x, d.y - 20, d.x, d.y + 20] : [d.x - 20, d.y, d.x + 20, d.y])];
+  const changes = evaluate({ objects: S.objects, groups: S.groups, tokens: S.tokens, blockers, props: S.map.props, walls: S.map.walls });
   if (Object.keys(changes).length) rawPatch(changes);
 }
 
@@ -160,18 +161,14 @@ function pickSpot(p) {   // the cell a trigger rule is waiting for
 }
 function toggleSelected(id) { S.selected.has(id) ? S.selected.delete(id) : S.selected.add(id); S.lastSel = id; drawObjects(); renderPanel(true); }
 map.addEventListener("pointerdown", (e) => {
+  if (S.pick?.zone === "link") { if (e.button === 0) connectTo(e, e.target.closest(".obj, .prop, .wall")?.dataset.id || wallAt(mapPoint(e))); return; }
   if (e.button !== 0 || (!S.isGM && S.paused)) return;   // only the left button draws, drags or uses; right-click is the menu
   const { objects, tokens } = S;
   const p = mapPoint(e), objEl = e.target.closest(".obj"), tokEl = e.target.closest(".token");
   if (!S.pick && toolDown(e, p)) return;   // GM map-building tools
-  if (!S.puzzleMode) {   // normal play: switches flip, dials turn
-    const o = objEl && objects[objEl.dataset.id];
-    if (o?.kind === "door" && !S.isGM && !o.win && o.doorKind !== "window" && o.doorKind !== "secret") {   // players open and close doors that are not locked
-      if (o.locked) { const t = document.querySelector("#toast"); if (t) { t.textContent = "The door is locked."; t.style.display = "block"; setTimeout(() => (t.style.display = "none"), 2000); } return; }
-      play("click"); return put(`objects/${objEl.dataset.id}/state`, o.state === "open" ? "closed" : "open");
-    }
-    if (o?.kind === "switch") { play("click"); return put(`objects/${objEl.dataset.id}/state`, o.state === "on" ? "off" : "on"); }
-    if (o?.kind === "dial") { play("click"); const s = statesOf(o); return put(`objects/${objEl.dataset.id}/state`, s[(s.indexOf(o.state) + 1) % s.length]); }
+  if (!S.puzzleMode) {   // normal play: the GM clicks switches and dials; players use right-click > Interact
+    const o = S.isGM && objEl && objects[objEl.dataset.id];
+    if (usable(o) && o.kind !== "door") return useObject(objEl.dataset.id);
   } else {
     if (S.pick) return pickSpot(p);
     if (objEl) { objDrag = { id: objEl.dataset.id, el: objEl, x0: p.x, y0: p.y, moved: false }; map.setPointerCapture(e.pointerId); return; }
@@ -212,7 +209,7 @@ const release = (e) => {
 let tokMenu = null;
 const closeTokMenu = () => { tokMenu?.remove(); tokMenu = null; };
 document.addEventListener("pointerdown", (e) => { if (tokMenu && !tokMenu.contains(e.target)) closeTokMenu(); }, true);   // capture: map panning stops the event before it bubbles
-document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeTokMenu(); });
+document.addEventListener("keydown", (e) => { if (e.key !== "Escape") return; closeTokMenu(); if (S.pick?.zone === "link") { S.pick = null; map.classList.remove("picking"); } });
 const SHEET_URL = "https://geezjonny.github.io/GeezSheets/companion.html";   // GeezSheets (sheet.html?char=<pc id>); change if hosted elsewhere
 let pcs = null;   // player characters from the main app (read only): [{ id, name }]
 async function loadPcs() {
@@ -347,15 +344,15 @@ map.addEventListener("contextmenu", (e) => {
   const tokEl = e.target.closest(".token");
   if (tokEl) { e.preventDefault(); return showTokenMenu(e, tokEl.dataset.id); }
   closeTokMenu();
-  if (!S.isGM) return;
   const objEl = e.target.closest(".obj"), propEl = e.target.closest(".prop"), p = mapPoint(e);
+  if (!S.isGM) return objEl && interactMenu(e, objEl.dataset.id);
   if (objEl) {
     const id = objEl.dataset.id, o = S.objects[id]; if (!o) return; e.preventDefault();
-    return showActionMenu(e, o.label || o.kind, [...(o.kind === "door" ? [[o.state === "open" ? "Close" : "Open", () => put(`objects/${id}/state`, o.state === "open" ? "closed" : "open")], [o.locked ? "Unlock" : "Lock", () => put(`objects/${id}/locked`, o.locked ? null : true)]] : []), ...(o.kind !== "door" && o.kind !== "light" ? [["Logic", () => openLogic(id)]] : []), ...(o.kind === "door" ? [["Replace all like this...", () => openReplace({ category: "door", from: o.doorKind || (o.win ? "window" : "wood") })]] : o.kind === "light" ? [["Replace all like this...", () => openReplace({ category: "light", from: o.color })]] : []), [o.hidden ? "Reveal to players" : "Hide from players", () => put(`objects/${id}/hidden`, !o.hidden)], ["Delete", () => put(`objects/${id}`, null)]], settingsFor("object", id).fields);
+    return showActionMenu(e, o.label || o.kind, [...(o.kind === "door" ? [[o.state === "open" ? "Close" : "Open", () => put(`objects/${id}/state`, o.state === "open" ? "closed" : "open")], [o.locked ? "Unlock" : "Lock", () => put(`objects/${id}/locked`, o.locked ? null : true)]] : []), ...(o.kind !== "door" && o.kind !== "light" ? [["Logic", () => openLogic(id)]] : []), ...(o.kind === "door" ? [["Replace all like this...", () => openReplace({ category: "door", from: o.doorKind || (o.win ? "window" : "wood") })]] : o.kind === "light" ? [["Replace all like this...", () => openReplace({ category: "light", from: o.color })]] : []), [o.hidden ? "Reveal to players" : "Hide from players", () => put(`objects/${id}/hidden`, !o.hidden)], ["Delete", () => put(`objects/${id}`, null)]], settingsFor("object", id).fields, (m) => linkMenu(m, id));
   }
   if (propEl) {
     const id = propEl.dataset.id, a = S.map.props[id]; if (!a) return; e.preventDefault();
-    return showActionMenu(e, a.kind, [["Replace all like this...", () => openReplace({ category: "prop", from: a.kind })], [a.hidden ? "Reveal to players" : "Hide from players", () => put(`map/props/${id}/hidden`, a.hidden ? null : true)], ["Delete", () => put(`map/props/${id}`, null)]], settingsFor("prop", id).fields);
+    return showActionMenu(e, a.kind, [["Replace all like this...", () => openReplace({ category: "prop", from: a.kind })], ...lightItem(id, a), [a.hidden ? "Reveal to players" : "Hide from players", () => put(`map/props/${id}/hidden`, a.hidden ? null : true)], ["Delete", () => put(`map/props/${id}`, null)]], settingsFor("prop", id).fields);
   }
   const labelEl = e.target.closest(".map-label");
   if (labelEl) { const id = labelEl.dataset.id, a = S.map.labels?.[id]; if (!a) return; e.preventDefault(); return showActionMenu(e, a.text || "Label", [["Delete", () => put(`map/labels/${id}`, null)]], settingsFor("label", id).fields); }
@@ -363,7 +360,7 @@ map.addEventListener("contextmenu", (e) => {
 });
 function groundMenu(e, p) {
   const wl = wallAt(p);
-  if (wl) { e.preventDefault(); return showActionMenu(e, "Wall", [["Replace all like this...", () => openReplace({ category: "wall", from: S.map.walls[wl]?.mat || "" })], ["Delete", () => put(`map/walls/${wl}`, null)]], settingsFor("wall", wl).fields); }
+  if (wl) { e.preventDefault(); return showActionMenu(e, "Wall", [["Replace all like this...", () => openReplace({ category: "wall", from: S.map.walls[wl]?.mat || "" })], wallItem(wl), ["Delete", () => put(`map/walls/${wl}`, null)]], settingsFor("wall", wl).fields); }
   const fg = fogAt(p);
   if (fg) { e.preventDefault(); const f = S.map.fog[fg]; return showActionMenu(e, "Fog", [[f.open ? "Re-fog room" : "Reveal room", () => put(`map/fog/${fg}/open`, !f.open)], ["Delete", () => put(`map/fog/${fg}`, null)]]); }
   const r = roofAt(p);
@@ -404,11 +401,51 @@ async function openNpcWindow(tid) {
     ${(c.attacks || []).length ? `<hr><b>Attacks</b>` + c.attacks.map((a) => `<div>${esc(a.name)} ${esc(a.to_hit ?? a.attack_bonus ?? "")} · ${esc(a.damage || a.damage_dice || "")} ${esc(a.damage_type || "")}</div>`).join("") : ""}
     ${sp?.spells?.length ? `<hr><b>Spells</b><div>${sp.spells.map((x) => esc(x.name)).join(", ")}</div>` : ""}</div>`;
 }
+// ---- connections: right-click a lever, button, plate or tripwire > Connect > click a target > pick what it does ----
+const DOES = { light: "Toggle light", vis: "Toggle visibility", lock: "Toggle lock", open: "Toggle open", activate: "Toggle activate" };
+const glows = (prop) => !!propParts(prop.kind)?.some((p) => p.glow);
+const lightItem = (id, p) => (glows(p) ? [[p.off ? "Turn light on" : "Turn light off", () => put(`map/props/${id}/off`, !p.off)]] : []);
+const wallItem = (id) => [S.map.walls[id]?.hidden ? "Show wall" : "Hide wall", () => put(`map/walls/${id}/hidden`, !S.map.walls[id]?.hidden)];
+function linkTarget(id) {
+  const o = S.objects[id]; if (o) return { o, type: "object", name: o.label || KINDS[o.kind]?.label || id };
+  const p = S.map.props?.[id]; if (p) return { o: p, type: "prop", name: PROPS[p.kind] || p.kind, glows: glows(p) };
+  const w = S.map.walls?.[id]; return w ? { o: w, type: "wall", name: `Wall at ${Math.round(w.x1 / 40)},${Math.round(w.y1 / 40)}` } : null;
+}
+function startConnect(id) {
+  setTool(null); S.pick = { zone: "link", id }; map.classList.add("picking");   // building stops, so the click picks instead of placing
+  const t = $("#toast"); t.textContent = "Click the object to connect (Esc cancels)."; t.style.display = "block"; setTimeout(() => (t.style.display = "none"), 3500);
+}
+function connectTo(e, tid) {
+  const src = S.pick.id, t = tid !== src && linkTarget(tid);
+  if (!t || !S.objects[src]) return;   // keep waiting for a click on an object, prop or wall
+  S.pick = null; map.classList.remove("picking");
+  showActionMenu(e, `${S.objects[src].label} → ${t.name}`, behaviorsFor(t.type, t.o, t.glows).map((does) => [DOES[does], () => patch({ [`objects/${src}/links/${tid}/${does}`]: true, [`objects/${src}/was`]: S.objects[src].state })]));
+}
+function linkMenu(menu, id) {
+  const o = S.objects[id]; if (!SOURCES.includes(o?.kind)) return;
+  const button = (label, fn, into = menu) => { const b = document.createElement("button"); b.textContent = label; b.addEventListener("click", () => { closeTokMenu(); fn(); }); into.append(b); };
+  const section = (label, into) => { const d = document.createElement("details"), s = document.createElement("summary"); s.textContent = label; d.append(s); into.append(d); return d; };
+  button("Connect", () => startConnect(id));
+  const links = Object.entries(o.links || {}).map(([tid, does]) => [tid, does, linkTarget(tid)]).filter(([, , t]) => t);
+  if (!links.length) return;
+  button(links.length > 1 ? "Disconnect all" : "Disconnect", () => put(`objects/${id}/links`, null));
+  const all = section("Connections", menu);
+  for (const [tid, does, t] of links) {
+    const one = section(t.name, all);
+    for (const key of behaviorsFor(t.type, t.o, t.glows)) {
+      const row = document.createElement("label"), box = Object.assign(document.createElement("input"), { type: "checkbox", checked: !!does[key] });
+      box.addEventListener("change", () => put(`objects/${id}/links/${tid}/${key}`, box.checked));   // false is stored, so an unticked link stays listed
+      row.append(box, ` ${DOES[key]}`); one.append(row);
+    }
+    button("Disconnect", () => put(`objects/${id}/links/${tid}`, null), one);
+  }
+}
 // Generic right-click menu: items are [label, action]; stays open until you pick something or click away.
-function showActionMenu(e, title, items, fields = []) {
+function showActionMenu(e, title, items, fields = [], extra) {
   closeTokMenu();
   const menu = tokMenu = document.createElement("div"); menu.id = "tokmenu";
   const b = document.createElement("b"); b.textContent = title; menu.append(b);
+  extra?.(menu);
   for (const [label, fn] of items) { const btn = document.createElement("button"); btn.textContent = label; btn.addEventListener("click", () => { closeTokMenu(); fn(); }); menu.append(btn); }
   addFields(menu, fields);
   menu.style.left = e.clientX + "px"; menu.style.top = e.clientY + "px"; document.body.appendChild(menu);
@@ -476,23 +513,29 @@ async function setView(on, first = false) {
   document.addEventListener("pointerup", end, true);
   document.addEventListener("pointercancel", end, true);
 }
-// 3D: a plain click works doors, switches and dials; right-click (without dragging) or the Select tool opens menus.
+// 3D: the GM's plain click works doors, switches and dials; right-click (without dragging) or the Select tool opens menus.
 function open3dMenu(e, hit) {
   const { type, id } = hit;
   if (type === "token") return showTokenMenu(e, id);
-  if (!S.isGM) return;
-  if (type === "object") { const o = S.objects[id]; if (o) showActionMenu(e, o.label || o.kind, [...(o.kind === "door" ? [[o.state === "open" ? "Close" : "Open", () => put(`objects/${id}/state`, o.state === "open" ? "closed" : "open")], [o.locked ? "Unlock" : "Lock", () => put(`objects/${id}/locked`, o.locked ? null : true)]] : []), ...(o.kind !== "door" && o.kind !== "light" ? [["Logic", () => openLogic(id)]] : []), [o.hidden ? "Reveal to players" : "Hide from players", () => put(`objects/${id}/hidden`, !o.hidden)], ["Delete", () => put(`objects/${id}`, null)]], settingsFor("object", id).fields); }
-  else if (type === "prop") { const a = S.map.props[id]; if (a) showActionMenu(e, a.kind, [[a.hidden ? "Reveal to players" : "Hide from players", () => put(`map/props/${id}/hidden`, a.hidden ? null : true)], ["Delete", () => put(`map/props/${id}`, null)]], settingsFor("prop", id).fields); }
-  else if (type === "wall") showActionMenu(e, "Wall", [["Delete", () => put(`map/walls/${id}`, null)]], settingsFor("wall", id).fields);
+  if (!S.isGM) return type === "object" && interactMenu(e, id);
+  if (type === "object") { const o = S.objects[id]; if (o) showActionMenu(e, o.label || o.kind, [...(o.kind === "door" ? [[o.state === "open" ? "Close" : "Open", () => put(`objects/${id}/state`, o.state === "open" ? "closed" : "open")], [o.locked ? "Unlock" : "Lock", () => put(`objects/${id}/locked`, o.locked ? null : true)]] : []), ...(o.kind !== "door" && o.kind !== "light" ? [["Logic", () => openLogic(id)]] : []), [o.hidden ? "Reveal to players" : "Hide from players", () => put(`objects/${id}/hidden`, !o.hidden)], ["Delete", () => put(`objects/${id}`, null)]], settingsFor("object", id).fields, (m) => linkMenu(m, id)); }
+  else if (type === "prop") { const a = S.map.props[id]; if (a) showActionMenu(e, a.kind, [...lightItem(id, a), [a.hidden ? "Reveal to players" : "Hide from players", () => put(`map/props/${id}/hidden`, a.hidden ? null : true)], ["Delete", () => put(`map/props/${id}`, null)]], settingsFor("prop", id).fields); }
+  else if (type === "wall") showActionMenu(e, "Wall", [wallItem(id), ["Delete", () => put(`map/walls/${id}`, null)]], settingsFor("wall", id).fields);
 }
-function useObject(id) {   // the same as clicking it in 2D
+const usable = (o) => ["switch", "button", "dial"].includes(o?.kind) || (o?.kind === "door" && !o.win && o.doorKind !== "window" && o.doorKind !== "secret");
+function interactMenu(e, id) {   // players: right-click a lever, dial or door
+  const o = S.objects[id]; if (!usable(o) || o.hidden) return;
+  e.preventDefault(); showActionMenu(e, KINDS[o.kind].label, [["Interact", () => useObject(id)]]);
+}
+function useObject(id) {
   const o = S.objects[id]; if (!o || (!S.isGM && (S.paused || o.hidden))) return;
-  if (o.kind === "door" && !o.win && o.doorKind !== "window" && o.doorKind !== "secret") {
+  if (!usable(o)) return;
+  if (o.kind === "door") {
     if (o.locked && !S.isGM) { const t = $("#toast"); t.textContent = "The door is locked."; t.style.display = "block"; setTimeout(() => (t.style.display = "none"), 2000); return; }
     play("click"); return put(`objects/${id}/state`, o.state === "open" ? "closed" : "open");
   }
   if (o.kind === "switch") { play("click"); return put(`objects/${id}/state`, o.state === "on" ? "off" : "on"); }
-  if (o.kind === "dial") { play("click"); const st = statesOf(o); return put(`objects/${id}/state`, st[(st.indexOf(o.state) + 1) % st.length]); }
+  if (o.kind === "dial" || o.kind === "button") { play("click"); const st = statesOf(o); return put(`objects/${id}/state`, st[(st.indexOf(o.state) + 1) % st.length]); }
 }
 {
   let down = null;
@@ -500,12 +543,13 @@ function useObject(id) {   // the same as clicking it in 2D
   document.addEventListener("pointerup", (e) => {
     const d = down; down = null;
     if (!d || !S.v3d || Math.hypot(e.clientX - d.x, e.clientY - d.y) > 5 || S.v3d.controlsBlocked()) return;
+    if (d.button === 0 && S.pick?.zone === "link") return connectTo(e, S.v3d.peekAt(e.clientX, e.clientY)?.id);   // objects, props and walls
     if (d.button === 0 && (S.tool || S.placing)) return;   // building: that click drew something
     if (d.button === 0 && S.puzzleMode) {   // traps and triggers in the angled view: the same clicks the flat layer takes
       if (S.pick) { const p = S.v3d.groundAt(e.clientX, e.clientY); if (p) pickSpot(p); return; }
       const hit = S.v3d.pickAt(e.clientX, e.clientY); if (hit?.type === "object") toggleSelected(hit.id); return;
     }
-    if (d.button === 0 && !S.select3d) { const hit = S.v3d.peekAt(e.clientX, e.clientY); if (hit?.type === "object") useObject(hit.id); return; }
+    if (d.button === 0 && S.isGM && !S.select3d) { const hit = S.v3d.peekAt(e.clientX, e.clientY); if (hit?.type === "object") useObject(hit.id); return; }
     if (d.button !== 0 && d.button !== 2) return;
     closeTokMenu();
     const hit = S.v3d.pickAt(e.clientX, e.clientY);

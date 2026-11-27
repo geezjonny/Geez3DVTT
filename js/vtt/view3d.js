@@ -12,6 +12,8 @@ import { isCurrentlyVisible } from "./explored-vtt.js";
 import { getRefImage } from "./refimage.js";
 import { doorSeg } from "./reach.js";
 import { CONDITIONS, conditionsOf } from "./conditions.js";
+import { propParts } from "./propmodels.js";
+import { SOURCES } from "../puzzle/objects.js";
 
 const U = 40, THICK = 0.22, clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const stored = (k, d) => { try { return localStorage.getItem("geez3d." + k) ?? d; } catch { return d; } };
@@ -202,7 +204,6 @@ function closest(x, z, s) {
 
 /* ---------------- model helpers ---------------- */
 const random = (seed) => () => { seed = (seed + 0x6d2b79f5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
-const seeded = (str) => { let a = 7; for (const ch of String(str)) a = (a * 31 + ch.charCodeAt(0)) | 0; return random(a); };
 const dummy = new THREE.Object3D();
 const matrix = (x, y, z, ry, sx, sy, sz) => { dummy.position.set(x, y, z); dummy.rotation.set(0, ry, 0); dummy.scale.set(sx, sy, sz); dummy.updateMatrix(); return dummy.matrix.clone(); };
 const along = (dx, dz) => Math.atan2(-dz, dx); // rotation about Y that points local +x along (dx, dz)
@@ -240,11 +241,11 @@ function sprite(text, { color = "#e6ebf1", size = 0.34, bg = "#0c0a0acc" } = {})
   s.scale.set(size * w / 56, size, 1); s.raycast = () => {}; return s;
 }
 
-/* ---------------- the GeezSheets prop kit ---------------- */
-const INK = 0x2a1a33, PARCHMENT = 0xa8763a, SOLID = 0x8c8894, BRASS = 0xb08a30;
+/* ---------------- props ---------------- */
+const PARCHMENT = 0xa8763a, SOLID = 0x8c8894, BRASS = 0xb08a30;
 const mats = new Map();
-const mat = (c) => { if (!mats.has(c)) { const col = new THREE.Color(c), hsl = col.getHSL({}); const m = lit(new THREE.MeshLambertMaterial({ color: col.setHSL(hsl.h, hsl.s * 0.7, hsl.l * 0.75), flatShading: true })); m.userData.shared = true; mats.set(c, m); } return mats.get(c); };
-const toonRamp = () => null, ink = () => {};
+const tone = (c) => { const col = new THREE.Color(c), hsl = col.getHSL({}); return col.setHSL(hsl.h, hsl.s * 0.7, hsl.l * 0.75); }; // muted, to sit with the stone
+const mat = (c) => { if (!mats.has(c)) { const m = lit(new THREE.MeshLambertMaterial({ color: tone(c), flatShading: true })); m.userData.shared = true; mats.set(c, m); } return mats.get(c); };
 function carve(geo, amt) { const p = geo.attributes.position; for (let i = 0; i < p.count; i++) { const x = p.getX(i), y = p.getY(i), z = p.getZ(i), h = (k) => { const n = Math.sin(x * 127.1 + y * 311.7 + z * 74.7 + k * 19.3) * 43758.5453; return (n - Math.floor(n)) * 2 - 1; }; p.setXYZ(i, x + h(1) * amt, y + h(2) * amt, z + h(3) * amt); } p.needsUpdate = true; geo.computeVertexNormals(); return geo; }
 const boxGeo = (w, h, d) => new THREE.BoxGeometry(w, h, d);
 const ROOF_COL = { thatch: 0x8a7238, slate: 0x48505c, tile: 0x7a3a28, flat: 0x55524d, wood: 0x5a3a1c, stone: 0x6d6a78 }, ROOF_DEF = 0x6a3828;
@@ -268,69 +269,41 @@ function roofMesh(a) {   // a gabled roof over a map rectangle: ridge along the 
 }
 
 
-function prop(p, pid) {   // chunky, outlined Wind Waker-style prop kit
-  const K = p.kind;
-  const g = new THREE.Group(); g.position.set(p.x / U, p.elevation || 0, p.y / U); g.rotation.y = -(p.rot || 0) * Math.PI / 180; g.scale.set((p.flip ? -1 : 1) * (p.s || 1), p.s || 1, p.s || 1); g.userData.pick = { type: "prop", id: pid }; root.add(g);
-  const R = seeded(p.id), pick = (a) => a[Math.floor(R() * a.length)];
-  const part = (geo, c, x = 0, y = 0, z = 0, tex, noInk = false) => { const m = new THREE.Mesh(geo, c?.isMaterial ? c : mat(c, tex)); m.position.set(x, y, z); m.castShadow = m.receiveShadow = !noInk; m.userData.noInk = noInk; g.add(m); return m; };
-  const b = (w, h, d, c, x, y, z, tex, noInk = false) => part(boxGeo(w, h, d), c, x, y, z, tex, noInk);
-  const cyl = (r, h, c, x, y, z, tex, n = 10) => part(new THREE.CylinderGeometry(r, r, h, n), c, x, y + h / 2, z, tex);
-  const carved = (geo, amount) => carve(geo, amount);
-  if (K === "crate") {
-    b(.68, .68, .68, PARCHMENT, 0, .34, 0, "wood"); for (const [x, z] of [[-.3, -.3], [.3, -.3], [-.3, .3], [.3, .3]]) b(.09, .78, .09, 0x7b4b2a, x, .39, z, "wood");
-    for (const z of [-.356, .356]) for (const a of [-1, 1]) { const m = b(.58, .065, .035, 0x8c5428, 0, .34, z, "wood"); m.rotation.z = a * .62; }
-  } else if (K === "barrel") {
-    const profile = [new THREE.Vector2(.22, 0), new THREE.Vector2(.29, .08), new THREE.Vector2(.34, .25), new THREE.Vector2(.35, .52), new THREE.Vector2(.30, .72), new THREE.Vector2(.23, .8)];
-    part(carved(new THREE.LatheGeometry(profile, 12), .012), PARCHMENT, 0, .4, 0, "wood");
-    for (const [y, color] of [[.18, BRASS], [.62, 0x5d7488]]) { const hoop = part(new THREE.TorusGeometry(.315, .025, 6, 12), color, 0, y, 0); hoop.rotation.x = Math.PI / 2; }
-    cyl(.245, .045, 0x8a5a34, 0, .78, 0, "wood", 12);
-  } else if (K === "table") {
-    b(.86, .14, .58, PARCHMENT, 0, .72, 0, "wood"); for (const [x, z] of [[-.36, -.22], [.36, -.22], [-.36, .22], [.36, .22]]) b(.09, .7, .09, 0x87512a, x, .35, z, "wood");
-    cyl(.1, .025, 0xe9d7a0, -.18, .805, .02, undefined, 12); cyl(.055, .08, BRASS, -.18, .82, .02, undefined, 10);
-  } else if (K === "chest") {
-    b(.76, .38, .5, PARCHMENT, 0, .2, 0, "wood");
-    const lid = part(new THREE.CylinderGeometry(.27, .27, .76, 12, 1, false, 0, Math.PI), PARCHMENT, 0, .47, 0, "wood"); lid.rotation.z = Math.PI / 2;
-    b(.055, .5, .54, BRASS, 0, .45, 0); b(.13, .16, .035, BRASS, 0, .24, -.275);
-    b(.05, .1, .03, INK, 0, .25, -.295);
-  } else if (K === "pillar") {
-    cyl(.3, .18, SOLID, 0, 0, 0, "stone"); cyl(.22, 1.55, SOLID, 0, .18, 0, "stone"); cyl(.34, .18, SOLID, 0, 1.73, 0, "stone");
-  } else if (K === "statue") {
-    b(.62, .25, .62, SOLID, 0, .125, 0, "stone"); cyl(.35, .12, SOLID, 0, .25, 0, "stone");
-    part(new THREE.CylinderGeometry(.18, .26, .62, 8), SOLID, 0, .68, 0, "stone"); part(new THREE.SphereGeometry(.19, 10, 7), SOLID, 0, 1.12, 0);
-    const armL = cyl(.07, .48, SOLID, -.25, .63, 0, "stone", 10); armL.rotation.z = -.48;
-    const armR = cyl(.07, .48, SOLID, .25, .63, 0, "stone", 10); armR.rotation.z = .48;
-  } else if (K === "bed") {
-    b(.72, .28, .92, PARCHMENT, 0, .14, 0, "wood"); b(.64, .14, .8, 0xf0dfc0, 0, .35, .02);
-    b(.63, .16, .27, 0xe0445a, 0, .45, .25); b(.42, .1, .2, 0xf5e8ca, 0, .47, -.27);
-    for (const [x, z] of [[-.33, -.42], [.33, -.42], [-.33, .42], [.33, .42]]) { cyl(.055, 1.02, 0x87512a, x, 0, z, "wood", 10); part(new THREE.SphereGeometry(.09, 10, 6), BRASS, x, 1.08, z); }
-    b(.72, .62, .07, PARCHMENT, 0, .65, .44, "wood");
-  } else if (K === "rug") {
-    part(new THREE.CylinderGeometry(.64, .64, .035, 8), 0xe0445a, 0, .018, 0, undefined, true); part(new THREE.CylinderGeometry(.5, .5, .04, 8), BRASS, 0, .04, 0, undefined, true);
-  } else if (K === "tree") {
-    cyl(.11, .9, 0x8a5a2c, 0, 0, 0, "wood", 8); part(carved(new THREE.IcosahedronGeometry(.42, 0), .04), 0x3fbf3a, -.22, 1.0, 0, "leaves"); part(carved(new THREE.IcosahedronGeometry(.46, 0), .04), 0x5fd04a, .2, 1.12, .02, "leaves"); part(carved(new THREE.IcosahedronGeometry(.4, 0), .04), 0x3fbf3a, 0, 1.42, 0, "leaves");
-  } else if (K === "pine") {
-    cyl(.08, .45, 0x8a5a2c, 0, 0, 0, "wood", 7); for (const [r, h, y] of [[.55, .72, .55], [.43, .65, 1.0], [.3, .58, 1.42]]) part(carved(new THREE.ConeGeometry(r, h, 7), .025), 0x3fbf3a, 0, y, 0, "leaves");
-  } else if (K === "bush") {
-    for (let i = 0; i < 3; i++) part(carved(new THREE.IcosahedronGeometry(.25 + R() * .1, 0), .03), pick([0x3fbf3a, 0x55cf45, 0x299c38]), (R() - .5) * .45, .23, (R() - .5) * .4, "leaves");
-  } else if (K === "obelisk") {   // glowing crystal obelisk on a stepped stone plinth, with orbiting shards
-    const GLOW = 0x5fe8ff, glow = (geo, x, y, z) => { const m = new THREE.Mesh(geo, new THREE.MeshToonMaterial({ color: GLOW, emissive: GLOW, emissiveIntensity: .75, gradientMap: toonRamp(), transparent: true, opacity: .92 })); m.position.set(x, y, z); m.castShadow = true; g.add(m); return m; };
-    cyl(.5, .1, SOLID, 0, 0, 0, "stone", 6); cyl(.4, .1, SOLID, 0, .1, 0, "stone", 6);
-    glow(new THREE.CylinderGeometry(.2, .3, 1.7, 6), 0, 1.15, 0); glow(new THREE.ConeGeometry(.2, .45, 6), 0, 2.225, 0);
-    for (const [a, r, y, s] of [[0, .55, 1.0, .1], [2.1, .5, 1.5, .08], [4.2, .58, .7, .09]]) { const sh = glow(new THREE.OctahedronGeometry(s, 0), Math.cos(a) * r, y, Math.sin(a) * r); sh.scale.y = 1.8; }
-  } else if (K === "rock") {
-    const m = part(carved(new THREE.DodecahedronGeometry(.36, 0), .06), pick([0x8b91a6, 0xa7a0b8, 0x747b91]), 0, .25, 0, "stone"); m.scale.y = .7;
-  } else if (K === "stump") {
-    cyl(.27, .32, 0x8a5a2c, 0, 0, 0, "wood", 8); part(new THREE.CylinderGeometry(.21, .21, .025, 8), 0xc9a878, 0, .33, 0);
-  } else if (K === "well") {
-    part(carved(new THREE.CylinderGeometry(.55, .6, .45, 9, 1, true), .025), SOLID, 0, .225, 0, "stone"); part(new THREE.CylinderGeometry(.42, .42, .04, 9), 0x386a91, 0, .3, 0); for (const x of [-.5, .5]) b(.08, 1.05, .08, PARCHMENT, x, .78, 0, "wood"); part(new THREE.ConeGeometry(.72, .42, 4), 0xe0445a, 0, 1.42, 0, "wood").rotation.y = Math.PI / 4;
-  } else if (K === "lamp") {
-    cyl(.06, 1.55, BRASS, 0, 0, 0, undefined, 7); b(.2, .24, .2, new THREE.MeshBasicMaterial({ color: 0xffd28a }), 0, 1.68, 0); part(new THREE.ConeGeometry(.18, .14, 4), BRASS, 0, 1.9, 0).rotation.y = Math.PI / 4;
-  } else if (K === "fence") {
-    for (const x of [-.45, 0, .45]) b(.08, .62, .08, PARCHMENT, x, .31, 0, "wood"); for (const y of [.22, .45]) b(1, .07, .05, PARCHMENT, 0, y, 0, "wood");
+// Each kind's shapes (propmodels.js) are merged once into one vertex-coloured mesh, plus one for anything that glows.
+const kits = new Map(); // kind -> [[geometry, material], ...]
+const SHAPES = { box: (w, h, d) => boxGeo(w, h, d), cyl: (top, r, h, n) => new THREE.CylinderGeometry(top, r, h, n), ball: (r) => new THREE.IcosahedronGeometry(r, 0), rock: (r) => carve(new THREE.DodecahedronGeometry(r, 0), r * 0.16), ring: (r, t) => new THREE.TorusGeometry(r, t, 4, 10) };
+function shape(part) {
+  let g = SHAPES[part.g](...part.a);
+  if (g.index) { const flatGeo = g.toNonIndexed(); g.dispose(); g = flatGeo; }
+  g.deleteAttribute("uv"); // mergeGeometries wants the same attributes on every piece
+  if (part.sy) g.scale(1, part.sy, 1);
+  if (part.rot) { const [x, y, z] = part.rot; g.rotateX(x).rotateY(y).rotateZ(z); }
+  return painted(g.translate(...part.at), part.glow ? part.c : tone(part.c));
+}
+let solidMat = null, glowMat = null;
+const shared = (m) => { m.userData.shared = true; return m; };
+function kit(kind) {
+  if (!kits.has(kind)) {
+    const parts = propParts(kind) || propParts("crate"); // a kind nobody has modelled shows as a crate
+    solidMat ||= shared(lit(new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true })));
+    glowMat ||= shared(fogged(new THREE.MeshBasicMaterial({ vertexColors: true })));
+    kits.set(kind, [[parts.filter((p) => !p.glow), solidMat], [parts.filter((p) => p.glow && !p.flame), glowMat], [parts.filter((p) => p.flame), glowMat, true]].filter(([list]) => list.length).map(([list, m, flame]) => {
+      const geo = merged(list.map(shape)); geo.userData.shared = true; return [geo, m, flame];
+    }));
   }
-  if (!g.children.length) b(.65, .35, .65, K.startsWith("decal_") ? 0x9b6b62 : 0xb79a63, 0, .175, 0, undefined, K.startsWith("decal_"));
-  if (p.color) g.traverse((n) => { if (n.isMesh && !n.userData.noInk) { const tint = Array.isArray(n.material) ? n.material.map((m) => m.clone()) : n.material.clone(); (Array.isArray(tint) ? tint : [tint]).forEach((m) => { m.color?.set(p.color); if (m.emissive?.getHex()) m.emissive.set(p.color); }); n.material = tint; } else if (n.isLight) n.color.set(p.color); });
-  const meshes = []; g.traverse((n) => { if (n.isMesh && !n.userData.noInk) meshes.push(n); }); meshes.forEach(ink);
+  return kits.get(kind);
+}
+let offMat = null, ghostMat = null; // a glowing piece switched off, and the GM's view of something hidden
+const unlit = () => (offMat ||= shared(lit(new THREE.MeshLambertMaterial({ vertexColors: true, color: 0x505050, flatShading: true }))));
+const ghost3 = () => (ghostMat ||= shared(lit(new THREE.MeshLambertMaterial({ vertexColors: true, transparent: true, opacity: 0.35, depthWrite: false, flatShading: true }))));
+const tints = new Map(); // a recoloured prop is one flat colour
+const tinted = (color) => { if (!tints.has(color)) tints.set(color, shared(lit(new THREE.MeshLambertMaterial({ color, flatShading: true })))); return tints.get(color); };
+function prop(p, pid) {
+  const g = new THREE.Group(); g.position.set(p.x / U, p.elevation || 0, p.y / U); g.rotation.y = -(p.rot || 0) * Math.PI / 180; g.scale.set((p.flip ? -1 : 1) * (p.s || 1), p.s || 1, p.s || 1); g.userData.pick = { type: "prop", id: pid }; root.add(g);
+  for (const [geo, m, flame] of kit(p.kind)) {
+    if (p.off && flame) continue;
+    const mesh = new THREE.Mesh(geo, p.hidden ? ghost3() : p.off && m === glowMat ? unlit() : p.color ? tinted(p.color) : m); mesh.castShadow = mesh.receiveShadow = m === solidMat && !p.hidden; g.add(mesh);
+  }
 }
 
 
@@ -557,24 +530,29 @@ function buildFixtures(H) {
 }
 
 /* Traps and triggers: a rune on the floor for anything that is not a door or a light. */
-const RUNES = { plate: ["▣", "#c9a45c"], tripwire: ["┄", "#d06a4a"], sight: ["◉", "#b06adf"], gauge: ["♥", "#d04a5a"], switch: ["⌇", "#6ac0a0"], dial: ["✥", "#6aa8d0"], floor: ["▦", "#a08a70"], spawn: ["☠", "#d04a4a"], stone: ["●", "#9a948a"], catapult: ["➶", "#d0904a"], initiative: ["⚔", "#e0c060"] };
+const RUNES = { sight: ["◉", "#b06adf"], gauge: ["♥", "#d04a5a"], dial: ["✥", "#6aa8d0"], floor: ["▦", "#a08a70"], spawn: ["☠", "#d04a4a"], stone: ["●", "#9a948a"], catapult: ["➶", "#d0904a"], initiative: ["⚔", "#e0c060"] };
+function triggerModel(o, g) { // levers, buttons, plates and tripwires are real pieces that show their state
+  const name = o.kind === "switch" ? (o.state === "on" ? "lever_on" : "lever") : o.kind === "plate" ? (o.state === "down" ? "plate_down" : "plate") : o.kind === "tripwire" ? `${o.state === "tripped" ? "tripwire_down" : "tripwire"}:${o.len || 3}` : "button";
+  const piece = new THREE.Group(); piece.position.set(o.x / U, 0, o.y / U); piece.rotation.y = o.kind === "tripwire" ? (o.dir === "v" ? -Math.PI / 2 : 0) : -(o.rot || 0) * Math.PI / 180; g.add(piece);
+  for (const [geo, m] of kit(name)) { const mesh = new THREE.Mesh(geo, m); mesh.castShadow = mesh.receiveShadow = m === solidMat; piece.add(mesh); }
+}
 function rune(id, o) {
   const [icon, color] = RUNES[o.kind] || ["?", "#c9a45c"], on = o.state !== (o.start ?? o.state), g = new THREE.Group();
   g.userData.pick = { type: "object", id };
-  const cells = o.kind === "tripwire" ? o.len || 3 : 1;
+  const cells = SOURCES.includes(o.kind) ? 0 : 1;
+  if (!cells) triggerModel(o, g);
   for (let i = 0; i < cells; i++) {
     const tex = canvasTexture(96, 96, (c) => { c.strokeStyle = color; c.lineWidth = 5; c.globalAlpha = o.hidden ? 0.5 : 1; if (o.hidden) c.setLineDash([10, 8]); c.fillStyle = on ? color + "66" : "#00000066"; c.beginPath(); c.roundRect(8, 8, 80, 80, 14); c.fill(); c.stroke(); c.setLineDash([]); c.fillStyle = color; c.font = "56px system-ui"; c.textAlign = "center"; c.textBaseline = "middle"; c.fillText(icon, 48, 52); });
     const m = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.9).rotateX(-Math.PI / 2), fogged(new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false })));
     m.position.set(o.x / U + (o.dir === "v" ? 0 : i), 0.03, o.y / U + (o.dir === "v" ? i : 0)); g.add(m);
   }
-  if (o.kind === "switch") { const base = new THREE.Mesh(boxGeo(0.3, 0.14, 0.2), mat(SOLID)), arm = new THREE.Mesh(boxGeo(0.07, 0.42, 0.07), mat(PARCHMENT)); base.position.set(o.x / U, 0.07, o.y / U); arm.position.set(o.x / U, 0.3, o.y / U); arm.rotation.z = o.state === "on" ? -0.6 : 0.6; g.add(base, arm); }
-  if (S.isGM) { const name = sprite(`${o.label || o.kind}: ${o.state}`, { size: 0.24 }); name.position.set(o.x / U, 0.75, o.y / U); g.add(name); }
+  if (S.isGM) { const name = sprite(`${o.label || o.kind}: ${o.state}${o.hidden ? " (hidden)" : ""}`, { size: 0.24 }); name.position.set(o.x / U, 0.75, o.y / U); g.add(name); }
   world.add(g);
 }
 
 function disposeTree(t) {
   t.traverse((o) => {
-    o.geometry?.dispose?.();
+    if (!o.geometry?.userData.shared) o.geometry?.dispose?.();
     for (const m of [].concat(o.material || [])) if (!m.userData.shared) { if (m.map && m.map !== glowTex) m.map.dispose(); m.dispose(); }
     if (o.isInstancedMesh) o.dispose();
   });
@@ -585,10 +563,10 @@ function plan(lv) {
   const doors = Object.entries(S.objects).filter(([, o]) => o.kind === "door" && lvOf(o) === lv && Number.isFinite(o.x)).map(([id, o]) => ({
     id, o, kind: o.doorKind || o.kindName || (o.win ? "window" : "wood"), window: !!(o.win || o.doorKind === "window"), seg: doorSeg(o).map((v) => v / U)
   }));
-  const cutters = doors.map((d) => d.o), walls = [];
-  for (const [id, w] of Object.entries(S.map.walls || {})) if (lvOf(w) === lv) for (const p of wallPieces(w, cutters)) walls.push({ id, mat: w.mat, seg: p.map((v) => v / U) });
+  const cutters = doors.map((d) => d.o), walls = [], gone = [];   // hidden walls block nothing; only the GM sees them
+  for (const [id, w] of Object.entries(S.map.walls || {})) if (lvOf(w) === lv) for (const p of wallPieces(w, cutters)) (w.hidden ? gone : walls).push({ id, mat: w.mat, seg: p.map((v) => v / U) });
   for (const d of doors) if (d.kind === "secret" && !isOpenDoor(d.o)) walls.push({ id: null, door: d.id, mat: d.o.mat, seg: d.seg }); // a secret door looks like wall
-  return { doors, walls };
+  return { doors, walls, gone };
 }
 
 /* ---------------- the other floors: cheap shells, no lights, no shadows ---------------- */
@@ -617,7 +595,7 @@ function buildOtherFloor(lv, bottom) {
   root = shell;
   for (const [id, prp] of Object.entries(S.map.props || {})) if (lvOf(prp) === lv && canExist(prp)) buildProp({ ...prp, id }, id);
   root = world;
-  shell.traverse((o) => { if (o.isMesh && o.material.userData.shared) { o.material = dimmed(new THREE.MeshLambertMaterial({ color: o.material.color, flatShading: true }), mask); o.castShadow = o.receiveShadow = false; } });
+  shell.traverse((o) => { if (o.isMesh && o.material.userData.shared) { o.material = dimmed(new THREE.MeshLambertMaterial({ color: o.material.color, vertexColors: o.material.vertexColors, flatShading: true }), mask); o.castShadow = o.receiveShadow = false; } });
 }
 
 let hitMesh = null, hitIds = [], staticSig = "", roofs = [], gridLines = null, gridOn = true;
@@ -655,12 +633,20 @@ function buildStatic() {
   // invisible boxes that make walls, doors and lights easy to click
   const hits = []; hitIds = [];
   const hit = (type, id, m) => { hits.push({ m }); hitIds.push({ type, id }); };
+  if (S.isGM) {
+    instances(boxGeo(1, 1, 1), new THREE.MeshLambertMaterial({ color: 0x9a90b0, transparent: true, opacity: 0.18, depthWrite: false }), data.gone.map((w) => ({ m: onSeg(w.seg, H / 2, H, THICK) })), { shadows: false });
+    for (const w of data.gone) hit("wall", w.id, onSeg(w.seg, H / 2, H, 0.3));
+  }
   for (const w of data.walls) hit(w.door ? "object" : "wall", w.door || w.id, onSeg(w.seg, H / 2, H, 0.3));
   for (const d of data.doors) if (canExist(d.o) && d.kind !== "secret") hit("object", d.id, onSeg(d.seg, H / 2 + 0.05, H + 0.1, 0.5, 0.98));
   if (S.isGM) for (const [id, o] of Object.entries(S.objects)) if (here(o) && o.kind === "light") {
     const on = o.state === "on";
     if (!on) { const m = new THREE.Mesh(new THREE.OctahedronGeometry(0.14), new THREE.MeshBasicMaterial({ color: 0x55505c, wireframe: true })); m.position.set(o.x / U, 0.6, o.y / U); world.add(m); }
     hit("object", id, matrix(o.x / U, 0.55, o.y / U, 0, 0.55, 1, 0.55));
+  }
+  for (const [id, o] of Object.entries(S.objects)) if (here(o) && canExist(o) && SOURCES.includes(o.kind)) {   // small pieces get a roomier click box
+    const n = o.kind === "tripwire" ? o.len || 3 : 1, v = o.dir === "v", wide = o.kind === "plate" ? 0.85 : 0.5, tall = o.kind === "switch" || o.kind === "button" ? 0.75 : 0.3;
+    hit("object", id, matrix(o.x / U + (v ? 0 : (n - 1) / 2), tall / 2, o.y / U + (v ? (n - 1) / 2 : 0), 0, n > 1 && !v ? n : wide, tall, n > 1 && v ? n : wide));
   }
   hitMesh = instances(boxGeo(1, 1, 1), new THREE.MeshBasicMaterial(), hits, { shadows: false });
   if (hitMesh) hitMesh.visible = false;

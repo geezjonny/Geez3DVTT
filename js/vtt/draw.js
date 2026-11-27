@@ -150,7 +150,7 @@ export function wallPieces(w, doors) {
 export const doorsList = () => Object.values(S.objects).filter((o) => o.kind === "door");
 export function drawWalls() {
   const w = $("#walls"); w.textContent = ""; const doors = doorsList();
-  for (const [id, a] of Object.entries(S.map.walls || {})) if ((a.lv ?? 0) === (S.level ?? S.map.level ?? 0)) for (const [x1, y1, x2, y2] of wallPieces(a, doors.filter(d => (d.lv ?? 0) === (S.level ?? S.map.level ?? 0)))) el("line", { x1, y1, x2, y2, class: `wall ${a.mat ? "m-" + a.mat : ""}`, "data-id": id }, w);
+  for (const [id, a] of Object.entries(S.map.walls || {})) if ((a.lv ?? 0) === (S.level ?? S.map.level ?? 0) && (S.isGM || !a.hidden)) for (const [x1, y1, x2, y2] of wallPieces(a, doors.filter(d => (d.lv ?? 0) === (S.level ?? S.map.level ?? 0)))) el("line", { x1, y1, x2, y2, class: `wall ${a.mat ? "m-" + a.mat : ""} ${a.hidden ? "hidden-obj" : ""}`, "data-id": id }, w);
 }
 export function drawMap() {
   const { floors, roofs, props, fog = {} } = S.map;

@@ -4,6 +4,22 @@ What changed in Geez3DVTT, newest first.
 
 ## 2026-11-26
 
+### Props
+- **Every prop now has its own low-poly model** instead of a plain box, decals included. They are built in code, so there
+  is still nothing extra to download.
+- Glowing props (obelisks, torches, braziers, rune circles and the like) can be switched off and on.
+
+### Levers, traps and connections
+- **Lever, button, plate and tripwire** have their own row in the Props window and show their state in 3D.
+- **Connect them by right-clicking:** Connect, click a door, light, wall, prop or trap, then pick what it does: toggle
+  open, lock, light, activate or visibility. Disconnect and Connections change it later.
+- **Hidden walls** stop blocking movement and sight, for secret passages. The GM sees a faint outline and can show them again.
+- **Stepping on a hidden plate or tripwire reveals it.** Plates and tripwires now only react to tokens on their own floor.
+- **Players use levers, buttons, dials and doors with right-click > Interact**; their left-click no longer does.
+
+### Initiative
+- **Tokens snap to the grid** when they join initiative, and again when combat starts.
+
 ### Table (`index.html`, GM link `gm.html`)
 - **The viewer is now a shared table**, built on the GeezSheets table code, with Firebase as the source of truth. Run it with `serve.cmd`; it no longer opens by double-clicking the file.
 - **Separate GM and player pages:** `gm.html` for the GM, `index.html` for players. A player link can name the character (`?char=lark`).

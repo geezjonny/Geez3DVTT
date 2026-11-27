@@ -22,7 +22,7 @@ export function doorSeg(o) {
 // Everything solid on a floor (every floor when none is given): walls, closed doors and windows.
 export function solidSegments(level = null) {
   const here = (r) => level == null || (r.lv ?? 0) === level;
-  const segs = Object.values(S.map.walls || {}).filter((w) => here(w) && [w.x1, w.y1, w.x2, w.y2].every(Number.isFinite)).map((w) => [w.x1, w.y1, w.x2, w.y2]);
+  const segs = Object.values(S.map.walls || {}).filter((w) => here(w) && !w.hidden && [w.x1, w.y1, w.x2, w.y2].every(Number.isFinite)).map((w) => [w.x1, w.y1, w.x2, w.y2]);
   for (const o of Object.values(S.objects || {})) {
     if (o.kind !== "door" || !here(o) || !Number.isFinite(o.x) || !Number.isFinite(o.y)) continue;
     const kind = o.doorKind || o.kindName, window = o.win || kind === "window";

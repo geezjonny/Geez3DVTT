@@ -26,3 +26,9 @@ export function buildInitiative(tokens = {}, existing = {}, mode = "all", roll =
   return { order, first: sorted[0]?.[0] ?? null };
 }
 
+
+// Who must be put on the grid: tokens that just joined the order, or everyone in it when combat starts.
+export function joined(before, now) {
+  const starting = before?.turn == null && now?.turn != null;
+  return Object.keys(now?.order || {}).filter((id) => starting || !before?.order?.[id]);
+}

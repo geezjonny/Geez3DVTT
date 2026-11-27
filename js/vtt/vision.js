@@ -82,7 +82,7 @@ export function visibilityPolygon(origin, radius, segments = []) {
 export function blockingSegments(walls = {}, doors = [], cut, level = null) {
   const result = [];
   for (const wall of Object.values(walls || {})) {
-    if (level != null && (wall.lv ?? 0) !== level) continue;
+    if (wall.hidden || (level != null && (wall.lv ?? 0) !== level)) continue;
     const pieces = typeof cut === "function" ? cut(wall, doors) : [[wall.x1, wall.y1, wall.x2, wall.y2]];
     for (const piece of pieces || []) if (finiteSegment(piece)) result.push(piece.slice(0, 4));
   }

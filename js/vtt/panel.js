@@ -24,7 +24,7 @@ $("#mode")?.addEventListener("click", () => {
 });
 
 const puzzleKinds = Object.entries(KINDS).filter(([k]) => !["door", "light"].includes(k));
-const puzzleGlyph = { plate: "▣", tripwire: "⚯", sight: "◉", gauge: "♥", switch: "⏻", dial: "◉", floor: "◇", spawn: "☠", stone: "●", catapult: "➶", initiative: "⚔", lantern: "☼", rune: "✦", event: "!" };
+const puzzleGlyph = { plate: "▣", tripwire: "⚯", sight: "◉", gauge: "♥", switch: "⏻", button: "⏺", dial: "◉", floor: "◇", spawn: "☠", stone: "●", catapult: "➶", initiative: "⚔", lantern: "☼", rune: "✦", event: "!" };
 let puzzleRecent = ["plate", "tripwire", "switch", "spawn", "dial"];
 try { puzzleRecent = JSON.parse(localStorage.getItem("vtt-recent-puzzle") || "null") || puzzleRecent; } catch { /* first run */ }
 function rememberPuzzle(kind) { puzzleRecent = [kind, ...puzzleRecent.filter((x) => x !== kind)].slice(0, 5); try { localStorage.setItem("vtt-recent-puzzle", JSON.stringify(puzzleRecent)); } catch { /* private mode */ } }

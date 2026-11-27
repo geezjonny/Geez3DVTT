@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { derive, actionsOf, conditionsOf, onFired, newObject, evaluate, resetAll } from "../index.js";
+import { derive, actionsOf, conditionsOf, onFired, newObject, evaluate, resetAll, behaviorsFor } from "../index.js";
 
 const plate = (x = 100, y = 100, extra = {}) => newObject("plate", x, y, 1, extra);
 
@@ -70,4 +70,36 @@ test("traps start hidden, others visible, and hidden does not stop a trip", () =
   assert.equal(newObject("door", 0, 0).hidden, false);
   const t = newObject("tripwire", 100, 100, 1, { len: 1 });
   assert.equal(derive(t, { A: { x: 100, y: 100 } }), "tripped");
+});
+
+test("connections flip the target once per use, plates only when set off, and never loop", () => {
+  const lever = { ...newObject("switch", 0, 0), state: "on", was: "off", links: { d: { open: true, lock: true }, b: { activate: true }, p1: { vis: true, light: true }, w1: { vis: true } } };
+  const other = { ...newObject("switch", 40, 0), was: "off", links: { s: { activate: true } } };
+  const objects = { s: lever, b: other, d: newObject("door", 80, 0) };
+  const c = evaluate({ objects, props: { p1: { kind: "obelisk" } }, walls: { w1: { x1: 0 } } });
+  assert.equal(c["map/props/p1/off"], true); assert.equal(c["map/walls/w1/hidden"], true);
+  assert.equal(c["objects/d/state"], "open"); assert.equal(c["objects/d/locked"], true); assert.equal(c["map/props/p1/hidden"], true);
+  assert.equal(c["objects/b/state"], "on"); assert.equal(c["objects/b/was"], "on"); assert.equal(c["objects/s/state"], undefined);
+  assert.deepEqual(evaluate({ objects: { s: { ...lever, was: "on" }, d: objects.d } }), {});
+  const p = { ...plate(100, 100), state: "down", was: "down", links: { d: { open: true } } };
+  assert.equal(evaluate({ objects: { p, d: objects.d } })["objects/d/state"], undefined);   // stepping off
+  assert.equal(evaluate({ objects: { p: { ...p, state: "up", was: "up" }, d: objects.d }, tokens: { A: { x: 100, y: 100 } } })["objects/d/state"], "open");
+});
+
+test("each target offers only what it can do, and activate fires a trap", () => {
+  assert.deepEqual(behaviorsFor("object", newObject("door", 0, 0)), ["open", "lock", "vis"]);
+  assert.deepEqual(behaviorsFor("object", newObject("light", 0, 0)), ["light", "vis"]);
+  assert.deepEqual(behaviorsFor("object", newObject("catapult", 0, 0)), ["activate", "vis"]);
+  assert.deepEqual(behaviorsFor("object", newObject("plate", 0, 0)), ["vis"]);
+  assert.deepEqual(behaviorsFor("prop", { kind: "obelisk" }, true), ["light", "vis"]);
+  assert.deepEqual(behaviorsFor("wall", {}), ["vis"]);
+  const objects = { s: { ...newObject("switch", 0, 0), state: "on", was: "off", links: { c: { activate: true } } }, c: newObject("catapult", 40, 0) };
+  assert.equal(evaluate({ objects })["objects/c/state"], "fired");
+});
+
+test("setting off a hidden trap reveals it once, only from its own floor", () => {
+  const p = plate(100, 100, { hidden: true }), on = { A: { x: 100, y: 100 } };
+  assert.equal(evaluate({ objects: { p }, tokens: on })["objects/p/hidden"], false);
+  assert.equal(evaluate({ objects: { p: { ...p, state: "down" } }, tokens: on })["objects/p/hidden"], undefined);   // re-hidden by the GM
+  assert.deepEqual(evaluate({ objects: { p }, tokens: { A: { x: 100, y: 100, lv: 1 } } }), {});
 });

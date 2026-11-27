@@ -1,7 +1,7 @@
 // GM map-building tools: the Build toolbar, its swatch windows, and drag/click handling for each tool.
 import { readAt } from "../store.js";
 import { put, patch } from "./undo.js";
-import { KINDS, newObject } from "../puzzle/index.js";
+import { SOURCES, KINDS, newObject } from "../puzzle/index.js";
 import { $, S, cellOf, mapSize } from "./state.js";
 import { el, PROPS, PROP_CATALOG, drawObjects } from "./draw.js";
 import { renderPanel } from "./panel.js";
@@ -154,7 +154,7 @@ const lightValues = Object.fromEntries(LIGHT_MATS.map((m) => [m.id, lightSetting
 const bt = { kind: "floor", mats: {}, window: false };
 const SEED = { floor: ["default", "stone", "wood", "grass", "water"], wall: ["default", "stone", "brick", "wood", "plaster"], door: ["default", "wood", "iron", "stone", "brick"], roof: ["default", "thatch", "slate", "tile", "wood"], elevation: [-10, 5, 10, 15, 20], light: LIGHT_MATS.slice(0, 5).map((m) => m.id), prop: ["crate", "table", "chair", "barrel", "chest"], object: ["plate", "switch", "spawn", "tripwire", "dial"], fog: [] };
 const OBJ_KINDS = Object.entries(KINDS).filter(([k]) => k !== "door" && k !== "light");
-const OBJ_GLYPH = { plate: "▣", tripwire: "┅", sight: "◉", gauge: "♥", switch: "⏻", dial: "◔", floor: "▦", spawn: "☠", stone: "●", catapult: "➶", initiative: "⚔" };
+const OBJ_GLYPH = { button: "⏺", plate: "▣", tripwire: "┅", sight: "◉", gauge: "♥", switch: "⏻", dial: "◔", floor: "▦", spawn: "☠", stone: "●", catapult: "➶", initiative: "⚔" };
 const keyOf = (k) => (KP[k].object ? "obj:" + palObj : KP[k].key);
 let recent = SEED;
 try { const r = JSON.parse(localStorage.getItem("vtt-recent-swatches") || "null"); if (r) recent = { ...SEED, ...r }; } catch { /* first run */ }
@@ -162,7 +162,7 @@ const kw = {};
 const remember = (kind, v) => { recent[kind] = [v, ...(recent[kind] || []).filter((x) => x !== v)].slice(0, 5); try { localStorage.setItem("vtt-recent-swatches", JSON.stringify(recent)); } catch { /* private mode */ } };
 const current = (k) => k === "elevation" ? curElev : KP[k].object ? palObj : KP[k].props ? palProp : k === "light" ? palLight : bt.mats[k] || "default";
 const propGlyph = (k) => { const s = PROP_CATALOG[k]?.shape || "mark"; return s === "rect" ? "<rect x='4' y='8' width='24' height='16' rx='3'/><path d='M7 11l18 10'/>" : s === "round" ? "<circle cx='16' cy='16' r='11'/><circle cx='16' cy='16' r='5' fill='none'/>" : s === "leaf" ? "<circle cx='10' cy='17' r='8'/><circle cx='22' cy='13' r='8'/><circle cx='16' cy='16' r='2'/>" : s === "rock" ? "<path d='M3 23l5-15 14-3 7 14-10 5z'/>" : "<circle cx='16' cy='16' r='9'/><path d='M4 16h24M16 4v24'/>"; };
-const chipHTML = (k, v) => KP[k].object ? `<button type="button" class="swatch ico" data-v="${v}" title="${KINDS[v]?.label || v}">${OBJ_GLYPH[v] || "?"}</button>`
+const chipHTML = (k, v) => KP[k].object || (KP[k].props && SOURCES.includes(v)) ? `<button type="button" class="swatch ico" data-v="${v}" title="${KINDS[v]?.label || v}">${OBJ_GLYPH[v] || "?"}</button>`
   : KP[k].props ? `<button type="button" class="swatch ico" data-v="${v}" title="${PROPS[v] || v}"><svg viewBox="0 0 32 32" aria-label="${PROPS[v] || v}">${propGlyph(v)}</svg></button>`
   : k === "light" ? (() => { const m = LIGHT_MATS.find((x) => x.id === v) || LIGHT_DEFAULT; return `<button type="button" class="swatch ico" data-v="${v}" title="${m.label}"><svg viewBox="0 0 32 32" aria-label="${m.label}"><path d="M16 27c-6 0-8-4-6-8 1-2 3-3 3-7 4 3 7 6 7 10 0 3-1 5-4 5z" fill="${m.color}" stroke="currentColor"/></svg></button>`; })()
   : k === "elevation" ? `<button type="button" class="swatch elev-swatch" data-elev="${v}" title="${v} feet">${v}</button>`
@@ -170,12 +170,12 @@ const chipHTML = (k, v) => KP[k].object ? `<button type="button" class="swatch i
 function optionsHTML(k) {
   const c = KP[k]; let h = `<option value="" selected disabled>more…</option>`;
   if (c.object) h += OBJ_KINDS.map(([id, o]) => `<option value="${id}">${o.label}</option>`).join("");
-  else if (c.props) { const g = {}; for (const [id, l] of Object.entries(PROPS)) (g[PROP_CATALOG[id]?.category || "other"] ||= []).push([id, l]); for (const [cat, list] of Object.entries(g)) h += `<optgroup label="${cat}">${list.map(([id, l]) => `<option value="${id}">${l}</option>`).join("")}</optgroup>`; }
+  else if (c.props) { h += `<optgroup label="Interactive">${SOURCES.map((id) => `<option value="${id}">${KINDS[id].label}</option>`).join("")}</optgroup>`; const g = {}; for (const [id, l] of Object.entries(PROPS)) (g[PROP_CATALOG[id]?.category || "other"] ||= []).push([id, l]); for (const [cat, list] of Object.entries(g)) h += `<optgroup label="${cat}">${list.map(([id, l]) => `<option value="${id}">${l}</option>`).join("")}</optgroup>`; }
   else if (k === "light") h += LIGHT_MATS.map((m) => `<option value="${m.id}">${m.label}</option>`).join("");
   else h += ["default", ...(c.mats || [])].map((m) => `<option value="${m}">${m}</option>`).join("");
   return h;
 }
-const winHTML = (k) => { const c = KP[k]; return k === "elevation" ? `<label class="elev-value">Height <input data-elev type="number" step="5" value="${curElev}"></label><div class="bt-recent elev-presets">${SEED.elevation.map((v) => chipHTML(k, v)).join("")}</div>` : `<div class="bt-recent"></div><select data-more aria-label="More ${c.label}">${optionsHTML(k)}</select>`
+const winHTML = (k) => { const c = KP[k]; return k === "elevation" ? `<label class="elev-value">Height <input data-elev type="number" step="5" value="${curElev}"></label><div class="bt-recent elev-presets">${SEED.elevation.map((v) => chipHTML(k, v)).join("")}</div>` : `<div class="bt-recent"></div>${c.props ? `<div class="bt-recent bt-fixed">${SOURCES.map((v) => chipHTML(k, v)).join("")}</div>` : ""}<select data-more aria-label="More ${c.label}">${optionsHTML(k)}</select>`
   + (c.door ? `<button type="button" class="swatch bt-win" data-win title="Windows never open; sight passes">Window</button>` : "")
   + (c.key === "floor" ? `<label class="bt-walls"><input type="checkbox" data-walls ${wallsAround ? "checked" : ""}> Draw walls around it</label>` : "")
   + (k === "light" ? `<div class="light-values"><label>Radius <input data-o="radius" type="number" min="1" max="12" step="1"></label><label>Fog <input data-o="fog" type="number" min="0" max="12" step="1"></label><label>Intensity <input data-o="intensity" type="range" min="0.2" max="1.5" step="0.05"><output data-intensity></output></label></div>` : "")
@@ -201,7 +201,7 @@ function renderLightValues() { const w = kw.light?.body, s = lightValues[palLigh
 function pick(kind, v) {
   const c = KP[kind];
   if (c.object) palObj = v; else if (c.props) palProp = v; else if (kind === "light") { palLight = v; lightValues[v] ||= lightSettings(LIGHT_MATS.find((m) => m.id === v)); renderLightValues(); } else bt.mats[kind] = v === "default" ? "" : v;
-  remember(kind, v); renderRecent(kind);
+  if (!(c.props && SOURCES.includes(v))) { remember(kind, v); renderRecent(kind); }   // the four working props have their own row
   activate(kind);
 }
 function activate(kind) { bt.kind = kind; applyPal(); }
@@ -315,12 +315,12 @@ function placeToken(c) {
   if (kind && ref) rememberToken(`${kind}:${ref}`);
   put(`tokens/${uid("t")}`, { x: c.x, y: c.y, lv: S.level ?? 0, label, ...(npc ? { npc } : {}), ...(pc ? { pc } : {}), ...(color ? { color } : {}), ...(img ? { img } : {}), ...(hp > 0 ? { hp: pc && cur != null ? Math.min(cur, hp) : hp, max: hp } : {}) });
 }
-function placeObject(kind, p) {
+function placeObject(kind, p, set = {}) {
   const snap = snapFor(kind, p), n = Object.values(S.objects).filter((o) => o.kind === kind).length + 1;
   const extra = kind === "dial" ? { values: ["N", "E", "S", "W"] } : kind === "gauge" ? { token: Object.keys(S.tokens).find((k) => S.tokens[k].hp != null) }
     : kind === "tripwire" ? { len: 3, dir: "h" } : kind === "spawn" ? { hp: 5 } : kind === "door" ? { dir: snap.dir, doorKind: curMode === "window" ? "window" : "wood", ...(curMode === "window" ? { win: true } : {}), ...(matOf() ? { mat: matOf() } : {}) }
     : kind === "light" ? (() => { const m = LIGHT_MATS.find((x) => x.id === palLight) || LIGHT_DEFAULT, s = lightValues[palLight] || lightSettings(m); return { lightType: m.id, radius: s.radius * 40, color: m.color, fog: s.fog, intensity: s.intensity }; })() : {};
-  put(`objects/${kind}${Date.now().toString(36)}`, { ...newObject(kind, snap.x, snap.y, n, extra), lv: S.level ?? 0 });
+  put(`objects/${kind}${Date.now().toString(36)}`, { ...newObject(kind, snap.x, snap.y, n, { ...extra, ...set }), lv: S.level ?? 0 });
 }
 function segmentEnd(a, p) {
   const v = vertex(p), s = segmentDoors(a, v);
@@ -421,6 +421,7 @@ export function toolDown(e, p) {
     else put(`map/labels/${uid("l")}`, { x: c.x, y: c.y, text, size: labelSettings.size, color: labelSettings.color, rot: 0, lv: S.level ?? 0 });
     rememberLabel(text); renderLabelWindow();
   }
+  else if (t === "prop" && SOURCES.includes(palProp)) placeObject(palProp, p, palProp === "tripwire" ? { dir: palRot % 180 === 90 ? "v" : "h" } : { rot: palRot });   // these work, so they are puzzle objects
   else if (t === "prop") { const c = cellOf(p), rot = palRandomRot ? Math.floor(Math.random() * 4) * 90 : palRot, s = palRandomScale ? .5 + Math.random() * 1.5 : palScale; put(`map/props/${uid("p")}`, { kind: opt("prop")?.value || palProp, x: c.x, y: c.y, lv: S.level ?? 0, rot, s, ...(palColor ? { color: palColor } : {}), ...(palFlip ? { flip: true } : {}) }); }
   else if (t === "wall") beginSegment("wall", e, p);
   else if (t === "floor" || t === "roof" || t === "fog" || t === "elevation") { const c = t === "floor" ? openCell(p) : cellOf(p); drag = { type: t, a: c, b: c }; capture(e); preview(); }

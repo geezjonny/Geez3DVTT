@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildInitiative } from "../initiative-rules.js";
+import { buildInitiative, joined } from "../initiative-rules.js";
 
 const tokens = {
   pc: { label: "Hero", pc: "hero" },
@@ -27,4 +27,11 @@ test("none mode adds everyone without rolling and preserves existing numbers", (
   assert.equal(result.order.pc.init, 20);
   assert.equal(result.order.npc.init, null);
   assert.equal(result.first, "pc");
+});
+
+test("newcomers snap, and everyone snaps when combat starts", () => {
+  const a = { turn: null, order: { pc: {} } }, b = { turn: null, order: { pc: {}, npc: {} } };
+  assert.deepEqual(joined(a, b), ["npc"]);
+  assert.deepEqual(joined(b, { ...b, turn: "pc" }), ["pc", "npc"]);
+  assert.deepEqual(joined({ ...b, turn: "pc" }, { ...b, turn: "npc" }), []);
 });

@@ -10,7 +10,8 @@ export const KINDS = {
   tripwire: { label: "Tripwire", role: "sensor", states: ["tripped", "clear"],      start: "clear" },
   sight:    { label: "Sight",    role: "sensor", states: ["sees", "clear"],         start: "clear" },
   gauge:    { label: "HP gauge", role: "sensor", states: ["alive", "bloodied", "dead"], start: "alive" },
-  switch:   { label: "Switch",   role: "input",  states: ["on", "off"],             start: "off" },
+  switch:   { label: "Lever",    role: "input",  states: ["on", "off"],             start: "off" },
+  button:   { label: "Button",   role: "input",  states: ["in", "out"],             start: "out" },
   dial:     { label: "Dial",     role: "input",  states: (o) => o.values || ["N", "E", "S", "W"], start: "N" },
   door:     { label: "Door",     role: "output", states: ["open", "closed"],        start: "closed" },
   light:    { label: "Light",    role: "output", states: ["on", "off"],             start: "on" },
@@ -23,6 +24,13 @@ export const KINDS = {
 export const statesOf = (o) => { const s = KINDS[o?.kind]?.states; return typeof s === "function" ? s(o) : s || []; };
 export const startOf = (o) => (o.kind === "dial" ? statesOf(o)[0] : KINDS[o.kind].start);
 export const isSensor = (o) => KINDS[o.kind]?.role === "sensor";
+export const SOURCES = ["switch", "button", "plate", "tripwire"];   // what can be connected to other things
+// What a connection can do to a target: an "object" (door, light, trap...), a "prop" (glows: it has a light) or a "wall".
+export function behaviorsFor(type, target, glows) {
+  if (type !== "object") return type === "prop" && glows ? ["light", "vis"] : ["vis"];
+  const own = { door: ["open", "lock"], floor: ["open"], light: ["light"] }[target.kind] || (isSensor(target) ? [] : ["activate"]);
+  return [...own, "vis"];
+}
 
 // Actions a "then" chip can cycle through for this object.
 export function actionsOf(o) {
@@ -38,7 +46,7 @@ export const cellsOf = (o) => {
   const n = o.kind === "tripwire" ? o.len || 3 : 1;
   return Array.from({ length: n }, (_, i) => (o.dir === "v" ? [o.x, o.y + 40 * i] : [o.x + 40 * i, o.y]));
 };
-const tokenOn = (cells, tokens) => Object.values(tokens || {}).some((t) => cells.some(([x, y]) => inCell(t, x, y)));
+const tokenOn = (cells, tokens, lv) => Object.values(tokens || {}).some((t) => (t.lv ?? 0) === lv && cells.some(([x, y]) => inCell(t, x, y)));
 export const inCell = (t, x, y) => Math.floor(t.x / 40) === Math.floor(x / 40) && Math.floor(t.y / 40) === Math.floor(y / 40);
 
 // Sight: can this object see a token? `blockers` are wall segments [x1,y1,x2,y2] (closed doors included, windows not).
@@ -59,7 +67,7 @@ export function derive(o, tokens, blockers) {
   if (o.kind === "sight") return sees(o, tokens, blockers) || (o.latch && o.state === "sees") ? "sees" : "clear";
   if (o.kind === "plate" || o.kind === "tripwire") {
     const [on, off] = statesOf(o);
-    return tokenOn(cellsOf(o), tokens) || (o.latch && o.state === on) ? on : off;
+    return tokenOn(cellsOf(o), tokens, o.lv ?? 0) || (o.latch && o.state === on) ? on : off;
   }
   if (o.kind === "gauge") {
     const t = tokens?.[o.token]; if (!t || t.hp == null) return o.state;

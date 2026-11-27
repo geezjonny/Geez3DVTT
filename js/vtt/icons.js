@@ -28,6 +28,7 @@ function switcho(o, g) {
   el("rect", { x: o.x - 15, y: o.y - 11, width: 30, height: 22, rx: 4, class: "body" }, g); const on = o.state === "on";
   line(g, { x1: o.x, y1: o.y + 7, x2: o.x + (on ? 9 : -9), y2: o.y - 8 }, "switch-lever"); el("circle", { cx: o.x + (on ? 9 : -9), cy: o.y - 8, r: 3, class: "switch-knob" }, g); hit(g, o.x, o.y);
 }
+function button(o, g) { el("circle", { cx: o.x, cy: o.y, r: 14, class: "body" }, g); el("circle", { cx: o.x, cy: o.y, r: 6, class: "switch-knob" }, g); hit(g, o.x, o.y); }
 function dial(o, g) {
   el("circle", { cx: o.x, cy: o.y, r: 16, class: "body" }, g);
   for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4; line(g, { x1: o.x + Math.cos(a) * 12, y1: o.y + Math.sin(a) * 12, x2: o.x + Math.cos(a) * (i % 2 ? 14 : 15), y2: o.y + Math.sin(a) * (i % 2 ? 14 : 15) }, "dial-tick"); }
@@ -53,4 +54,4 @@ function sight(o, g) {
 }
 function initiative(o, g) { el("circle", { cx: o.x, cy: o.y, r: 15, class: "body" }, g); path(g, `M${o.x - 8} ${o.y - 8} L${o.x + 8} ${o.y + 8} M${o.x + 8} ${o.y - 8} L${o.x - 8} ${o.y + 8} M${o.x - 9} ${o.y - 3} L${o.x - 3} ${o.y - 9} M${o.x + 9} ${o.y - 3} L${o.x + 3} ${o.y - 9}`, "rune-mark"); hit(g, o.x, o.y); }
 
-export function drawIcon(o, g) { ({ sight, initiative, plate, tripwire, gauge, switch: switcho, dial, light, floor, spawn, stone, catapult }[o.kind] || (() => hit(g, o.x, o.y)))(o, g); }
+export function drawIcon(o, g) { ({ button, sight, initiative, plate, tripwire, gauge, switch: switcho, dial, light, floor, spawn, stone, catapult }[o.kind] || (() => hit(g, o.x, o.y)))(o, g); }

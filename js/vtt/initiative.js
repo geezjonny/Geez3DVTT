@@ -1,12 +1,12 @@
 import { watch, read, put, patch } from "../store.js";
-import { S } from "./state.js";
+import { S, cellOf } from "./state.js";
 import { toolbar, svg } from "./ui.js";
-import { buildInitiative } from "./initiative-rules.js";
+import { buildInitiative, joined } from "./initiative-rules.js";
 import { tickEffects } from "./effects.js";
 import { visibleToPlayer } from "./visibility.js";
 
 let current = { turn: null, round: 1, order: {} };
-let win = null, startBtn = null, nextBtn = null, started = false;
+let win = null, startBtn = null, nextBtn = null, started = false, seen = null;
 
 const isGM = () => S.isGM;
 function entries() {
@@ -56,6 +56,17 @@ async function cleanMissing() {
   const order = { ...(current.order || {}) }; let changed = false;
   for (const id of Object.keys(order)) if (!S.tokens[id]) { delete order[id]; changed = true; }
   if (changed) await saveOrder(order);
+}
+
+// One place for every way in (menu, Start, roll call, traps): the GM's page watches the order and snaps newcomers.
+function snapJoined(value) {
+  const ids = seen && isGM() ? joined(seen, value) : [], changes = {};   // not on first load: nobody just joined
+  seen = value || {};
+  for (const id of ids) {
+    const t = S.tokens[id]; if (!t) continue;
+    const c = cellOf(t); if (c.x !== t.x || c.y !== t.y) Object.assign(changes, { [`tokens/${id}/x`]: c.x, [`tokens/${id}/y`]: c.y });
+  }
+  if (Object.keys(changes).length) patch(changes);
 }
 
 export function inInitiative(tokenId) { return !!current.order?.[tokenId]; }
@@ -108,7 +119,7 @@ export function initInitiative() {
   startBtn = button(toggleCombat); nextBtn = button(nextTurn);
   nextBtn.title = "Next Turn"; nextBtn.setAttribute("aria-label", nextBtn.title); nextBtn.innerHTML = svg('<path d="m5 4 10 8-10 8ZM19 4v16"/>');
   render();
-  watch("initiative", (value) => { S.combat = value?.turn != null; current = { turn: value?.turn ?? null, round: value?.round || 1, order: value?.order || {} }; S.round = current.round; if (S.turn !== current.turn) { S.turn = current.turn; document.dispatchEvent(new Event("turnchanged")); } render(); cleanMissing(); });
+  watch("initiative", (value) => { snapJoined(value); S.combat = value?.turn != null; current = { turn: value?.turn ?? null, round: value?.round || 1, order: value?.order || {} }; S.round = current.round; if (S.turn !== current.turn) { S.turn = current.turn; document.dispatchEvent(new Event("turnchanged")); } render(); cleanMissing(); });
   watch("tokens", (value) => { if (value) S.tokens = value; render(); cleanMissing(); });
   document.addEventListener("tokenschanged", render);
   document.addEventListener("vttvisibilitychange", render);

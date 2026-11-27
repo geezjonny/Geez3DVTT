@@ -8,14 +8,16 @@
 //         { id, action: "move", to:{x,y} } level-based for objects (back to start when unmet), once for tokens
 //         { id, action: "fire" }           edge-based, latches "fired" until a GM reset (event kinds)
 
-import { statesOf, startOf, derive, inCell } from "./objects.js";
+import { statesOf, startOf, derive, inCell, isSensor } from "./objects.js";
 
 // Returns { "objects/door1/state": "open", ... } paths relative to /test. Empty when nothing changes.
-export function evaluate({ objects = {}, groups = {}, tokens = {}, blockers = [] }) {
+export function evaluate({ objects = {}, groups = {}, tokens = {}, blockers = [], props = {}, walls = {} }) {
   const changes = {}, states = {};
   for (const [id, o] of Object.entries(objects)) {
     states[id] = derive(o, tokens, blockers);
     if (states[id] !== o.state) changes[`objects/${id}/state`] = states[id];
+    // Setting off a hidden plate or tripwire shows it. Only at that moment, so the GM can hide it again.
+    if (o.hidden && ["plate", "tripwire"].includes(o.kind) && states[id] !== o.state && states[id] === statesOf(o)[0]) changes[`objects/${id}/hidden`] = false;
   }
   const spot = (id) => objects[id] || tokens[id];
   for (const [gid, g] of Object.entries(groups)) {
@@ -41,6 +43,28 @@ export function evaluate({ objects = {}, groups = {}, tokens = {}, blockers = []
     }
     if (met !== !!g.met) changes[`groups/${gid}/met`] = met;
   }
+  // Connections: objects/<source>/links/<target> = { open, light, activate, lock, vis }. Each use of a lever or button, and each time a
+  // plate or tripwire goes off, flips the ticked things. `was` is the source's last handled state.
+  const now = (path, before) => (path in changes ? changes[path] : before);
+  for (const [id, o] of Object.entries(objects)) {
+    if (!o.links || states[id] === now(`objects/${id}/was`, o.was)) continue;
+    changes[`objects/${id}/was`] = states[id];
+    if (isSensor(o) && states[id] !== statesOf(o)[0]) continue;   // released, not set off
+    for (const [tid, does] of Object.entries(o.links)) {
+      const t = objects[tid], target = t || props[tid] || walls[tid]; if (!target) continue;
+      const path = t ? `objects/${tid}` : props[tid] ? `map/props/${tid}` : `map/walls/${tid}`;
+      const flip = (field) => { changes[`${path}/${field}`] = !now(`${path}/${field}`, !!target[field]); };
+      if (does.vis) flip("hidden");
+      if (does.light && props[tid] && !t) flip("off");
+      if (!t) continue;
+      if (does.lock && t.kind === "door") flip("locked");
+      const s = statesOf(t);
+      if ((does.open || does.light || does.activate) && !isSensor(t) && s.length) {   // open, light and activate all step the target's state
+        states[tid] = s[(s.indexOf(states[tid]) + 1) % s.length]; changes[`${path}/state`] = states[tid];
+        if (t.links) changes[`${path}/was`] = states[tid];   // a flipped lever does not set off its own links: no loops
+      }
+    }
+  }
   return changes;
 }
 
@@ -49,6 +73,7 @@ export function resetAll(objects = {}, groups = {}) {
   const c = {};
   for (const [id, o] of Object.entries(objects)) {
     c[`objects/${id}/state`] = o.start ?? startOf(o);
+    if (o.links) c[`objects/${id}/was`] = o.start ?? startOf(o);
     if (o.sx != null) { c[`objects/${id}/x`] = o.sx; c[`objects/${id}/y`] = o.sy; }
   }
   for (const id of Object.keys(groups)) c[`groups/${id}/met`] = false;
