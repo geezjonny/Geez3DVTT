@@ -1,48 +1,25 @@
-// Page-load "Join the table" card: who you are (players), camera / mic, then it opens the video dock.
-// The browser's own camera + mic permission prompt appears as the dock opens. Add ?nojoin to the address to skip this card.
-// Sets the same "Me" character the Me button does, so your call name matches your token (see talk.js).
+// "Who are you?" card on the player page, shown on each visit unless the link names a character (?char=<id>).
+// Nobody's token moves until they choose.
 import { S } from "./state.js";
 
-const el = (tag, props = {}, ...kids) => { const n = Object.assign(document.createElement(tag), props); n.append(...kids); return n; };
-const store = { get: (k) => { try { return localStorage.getItem(k) || ""; } catch { return ""; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch { /* fine */ } } };
-
 export function initJoin({ loadPcs, setMe, getMe }) {
-  if (new URLSearchParams(location.search).has("nojoin")) return;
-  const select = el("select", { id: "join-who" }, el("option", { value: "", textContent: "Loading characters…" }));
-  const anyName = el("input", { id: "join-name", type: "text", maxLength: 24, placeholder: "Your name", value: store.get("geez.videochat.name"), hidden: true });
-  const cam = el("input", { type: "checkbox", checked: true }), mic = el("input", { type: "checkbox", checked: true });
-  const joinBtn = el("button", { type: "submit", id: "join-go", textContent: "Join the table" });
-  const skipBtn = el("button", { type: "button", id: "join-skip", className: "ghost", textContent: "Skip video" });
-  const who = S.isGM ? el("p", { className: "join-gm", textContent: "You're the GM." })
-    : el("label", {}, el("span", { textContent: "Who are you?" }), select, anyName);
-  const card = el("form", { id: "joincard" },
-    el("h2", { textContent: "Join the table" }), who,
-    el("div", { className: "join-opts" }, el("label", {}, cam, " Camera"), el("label", {}, mic, " Microphone")),
-    el("p", { className: "join-note", textContent: "Your browser will ask to use your camera and microphone." }),
-    el("div", { className: "join-btns" }, joinBtn, skipBtn));
-  const overlay = el("div", { id: "joinoverlay" }, card);
-  document.body.append(overlay);
-  const close = () => overlay.remove();
+  S.choosing = true;
+  const card = document.createElement("dialog"), title = document.createElement("h2"), list = document.createElement("div");
+  card.id = "joincard"; title.textContent = "Who are you?"; list.className = "join-list";
+  card.setAttribute("aria-label", title.textContent);
+  card.append(title, list);
+  card.addEventListener("cancel", (e) => e.preventDefault());
+  card.addEventListener("close", () => { if (S.choosing) card.showModal(); });   // browsers let a second Escape through
+  document.body.append(card); card.showModal();
 
-  if (!S.isGM) loadPcs().then((list) => {
-    const mine = getMe();
-    select.replaceChildren(...list.filter((c) => c.name).map((c) => el("option", { value: c.id, textContent: c.name, selected: mine?.id === c.id })), el("option", { value: "", textContent: "Someone else (type a name)", selected: !!mine && !list.some((c) => c.id === mine.id) }));
-    sync();
-  });
-  const sync = () => { anyName.hidden = S.isGM || select.value !== "" || !select.options.length || select.options[0].textContent.startsWith("Loading"); };
-  select.addEventListener("change", sync);
-
-  card.addEventListener("submit", (e) => {
-    e.preventDefault();
-    if (!S.isGM) {
-      const opt = select.selectedOptions[0];
-      if (select.value) setMe({ id: select.value, name: opt.textContent });
-      else { setMe(null); if (anyName.value.trim()) store.set("geez.videochat.name", anyName.value.trim()); }
-    }
-    close();
-    window.geezOpenChat?.({ cam: cam.checked, mic: mic.checked });
-  });
-  skipBtn.addEventListener("click", close);
-  addEventListener("keydown", (e) => { if (e.key === "Escape") close(); }, { once: true });
-  joinBtn.focus();
+  const button = (text, onClick) => { const b = document.createElement("button"); b.type = "button"; b.textContent = text; b.addEventListener("click", onClick); return b; };
+  async function fill() {
+    list.textContent = "Loading characters…";
+    const pcs = (await loadPcs()).filter((c) => c.name).sort((a, b) => a.name.localeCompare(b.name));
+    if (!pcs.length) return list.replaceChildren("Could not load the characters.", button("Try again", fill));
+    const buttons = pcs.map((pc) => button(pc.name, () => { S.choosing = false; card.remove(); setMe({ id: pc.id, name: pc.name }); }));
+    list.replaceChildren(...buttons);
+    (buttons[pcs.findIndex((c) => c.id === getMe()?.id)] || buttons[0]).focus();   // last time's character: Enter joins
+  }
+  fill();
 }

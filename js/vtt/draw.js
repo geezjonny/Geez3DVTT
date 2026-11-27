@@ -99,8 +99,8 @@ export function drawTokens() {
   Object.entries(S.tokens).forEach(([id, t], i) => {
     if ((t.lv ?? 0) !== (S.level ?? S.map.level ?? 0) || !visibleToPlayer(t, Object.values(S.map.fog || {}), S.isGM, S.currentVisible, S.map.exploredEnabled !== false)) return;
     if (!S.isGM && S.map.exploredEnabled !== false && !isCurrentlyVisible(t.x, t.y)) return;
-    const g = el("g", { class: `token ${t.hidden ? "hidden-obj" : ""}${S.talking?.has(id) ? " talking" : ""}`, transform: `translate(${t.x} ${t.y})`, "data-id": id }, layer);
-    const b = el("g", { class: "tokbody" }, g);   // the art lives here so a talking token can shake without fighting the position transform
+    const g = el("g", { class: `token ${t.hidden ? "hidden-obj" : ""}`, transform: `translate(${t.x} ${t.y})`, "data-id": id }, layer);
+    const b = el("g", { class: "tokbody" }, g);
     if (S.turn === id) el("circle", { r: 24, class: "turn-ring" }, b);   // whose turn it is (initiative)
     if (t.torch) el("circle", { r: TORCH_CELLS * 40, fill: glowFor("#ffb347"), "pointer-events": "none" }, b);   // held torch glow
     conditionsOf(t).forEach((c, k) => el("circle", { r: 21 + k * 4, fill: "none", stroke: CONDITIONS[c][1], "stroke-width": 3, class: "cond-ring", "pointer-events": "none" }, b).appendChild(document.createElementNS("http://www.w3.org/2000/svg", "title")).textContent = CONDITIONS[c][0]);

@@ -47,9 +47,7 @@ import { canReach } from "./reach.js";
 import { initTools, setTool, duplicate, snapFor, toolDown, toolMove, toolUp, roofAt, fogAt, wallAt, floorAt, settingsFor } from "./tools.js";
 import { renderPanel, openLogic } from "./panel.js";
 import { initAttack, attackOptions, beginAttack, sheetOf } from "./attack.js";
-import "./talk.js";
 import { initJoin } from "./join.js";
-import { initChatDock } from "./chatdock.js";
 import { initTable } from "./table.js";
 import { EFFECT_PRESETS, effectsOf, effectRemaining, makeEffect, damageAdjustment } from "./effects.js";
 import { initExplored } from "./explored-vtt.js";
@@ -138,13 +136,14 @@ let me = null; try { me = JSON.parse(localStorage.getItem("vtt-me")); } catch { 
 function canMove(id) {
   const t = S.tokens[id]; if (!t) return false;
   if (S.isGM) return true;
+  if (S.choosing) return false;      // the "Who are you?" card is still up
   if (!isPcToken(t)) return false;   // enemies and NPCs belong to the GM
   if (!me) return true;              // nobody chosen yet: any player token
   return t.pc ? t.pc === me.id : String(t.label || "").toLowerCase() === me.name.toLowerCase();
 }
 if (!S.isGM) addBarButton({ quick: true, id: "me", icon: "🧝", label: "Me", title: "Choose which character you move", onClick: async (e, b) => {
-  const list = await loadPcs(), pick = (v) => { me = v; try { localStorage.setItem("vtt-me", JSON.stringify(v)); } catch { /* fine */ } b.querySelector(".lbl").textContent = v ? v.name.slice(0, 8) : "Me"; dispatchEvent(new Event("vtt-me-changed")); };
-  dropMenu(b, [["I am…", null], ...list.filter((c) => c.name).map((c) => [c.name, () => pick({ id: c.id, name: c.name })]), ["Anyone (no limit)", () => pick(null)]]);
+  const list = await loadPcs();
+  dropMenu(b, [["I am…", null], ...list.filter((c) => c.name).map((c) => [c.name, () => setMe({ id: c.id, name: c.name })]), ["Anyone (no limit)", () => setMe(null)]]);
 } });
 
 // ---- map interaction -------------------------------------------------------
@@ -214,11 +213,10 @@ document.addEventListener("pointerdown", (e) => { if (tokMenu && !tokMenu.contai
 document.addEventListener("keydown", (e) => { if (e.key !== "Escape") return; closeTokMenu(); if (S.pick?.zone === "link") { S.pick = null; map.classList.remove("picking"); } });
 const SHEET_URL = "https://geezjonny.github.io/GeezSheets/companion.html";   // GeezSheets (sheet.html?char=<pc id>); change if hosted elsewhere
 let pcs = null;   // player characters from the main app (read only): [{ id, name }]
-async function loadPcs() {
-  if (pcs) return pcs; pcs = [];
-  try { pcs = Object.entries((await readAt("characters/pcs")) || {}).map(([id, c]) => ({ id, name: c?.name || c?.identity?.name || c?.basic?.name || "" })); }
-  catch (err) { console.warn("Could not read PCs", err); }
-  return pcs;
+function loadPcs() {   // the pending read is shared, so a second caller never gets an empty list; a failed read is retried
+  return pcs ||= readAt("characters/pcs")
+    .then((all) => Object.entries(all || {}).map(([id, c]) => ({ id, name: c?.name || c?.identity?.name || c?.basic?.name || "" })))
+    .catch((err) => { console.warn("Could not read PCs", err); pcs = null; return []; });
 }
 // ---- GeezSheets write-back: a PC token's HP and conditions live on their sheet (same fields the sheet writes) ----
 async function pcIdFor(t) {
@@ -594,17 +592,16 @@ function useObject(id) {
   document.addEventListener("pointerup", (e) => { if (e.button === 0 && floorUnder(e)) toolUp(); });
 }
 
-// Page-load "Join the table" card (who you are + camera/mic, then opens the video dock).
+// Who this player is: kept in the browser, so walking, floors and roll call follow that character.
 const setMe = (v) => { me = v; try { localStorage.setItem("vtt-me", JSON.stringify(v)); } catch { /* fine */ } const l = document.querySelector("#bar-me .lbl"); if (l) l.textContent = v ? v.name.slice(0, 8) : "Me"; dispatchEvent(new Event("vtt-me-changed")); };
-/* video/voice disabled: initChatDock(); */
-/* video/voice disabled: initJoin({ loadPcs, setMe, getMe: () => me }); */
 
-// Start in 3D, walking enabled. A player link may name the character: ?char=<id>.
+// Start in 3D, walking enabled. Players choose who they are; a link may name the character instead: ?char=<id>.
+const want = new URLSearchParams(location.search).get("char");
+const ask = () => initJoin({ loadPcs, setMe, getMe: () => me });
+if (!S.isGM) { if (want) S.choosing = true; else ask(); }
 initWalk({ myToken: () => (S.isGM ? null : myTokenId()) });
 setView(true).then(() => {
   if (S.isGM) return;
   followOwnFloor();
-  const want = new URLSearchParams(location.search).get("char");
-  if (want) loadPcs().then((list) => { const c = list.find((x) => x.id === want); if (c) setMe({ id: c.id, name: c.name }); });
-  else if (!me) setTimeout(() => document.getElementById("bar-me")?.click(), 600);
+  if (want) loadPcs().then((list) => { const c = list.find((x) => x.id === want); if (!c) return ask(); S.choosing = false; setMe({ id: c.id, name: c.name }); });
 });
