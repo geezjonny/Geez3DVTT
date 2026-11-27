@@ -29,8 +29,12 @@ export const CLASSES={
  Warlock:{top:'#2a1a33',bot:'#1a1020',trim:'#7cf2c0',style:'cloth',main:'rod',off:'book',hat:'hood',cape:'cape'}
 };
 export const HAIRS=['bald','short','long','mohawk','bun','braids'],BEARDS=['none','stubble','short','long'];
-export const HATS=['none','hood','wizard','helm','crown','cap'],STYLES=['cloth','leather','plate','robe','bare'],CAPES=['none','cape'];
-export const ITEMS=['none','sword','axe','mace','dagger','staff','rod','bow','shield','book','orb','lute'];
+export const HATS=['none','hood','wizard','helm','horned','crown','circlet','cap','feather','tophat','bandana'],STYLES=['cloth','leather','studded','hide','chain','scale','plate','robe','coat','bare'],CAPES=['none','cape','long','quiver','backpack','featherwings','batwings'];
+export const ITEMS=['none','sword','greatsword','rapier','dagger','axe','mace','hammer','flail','club','spear','trident','scythe','staff','rod','wand','bow','crossbow','shield','towershield','buckler','book','orb','lute','torch','lantern','potion','tankard','skull','banner'];
+// body parts and extras: the first choice is the default ('race' and 'auto' follow the race or outfit)
+export const PARTS={head:['normal','round','square','long','skull','beast','bird'],torso:['normal','slim','broad','belly'],arms:['normal','muscular','bone','claws','metal'],legs:['normal','bone','metal','hooves','peg'],
+ ears:['race','none','round','elf','goblin','cat'],horns:['race','none','tief','drag','antlers'],tail:['race','none','drag','cat','tief'],face:['none','glasses','eyepatch','mask'],neck:['none','scarf','amulet'],shoulders:['auto','none','pauldrons','spikes','fur']};
+export const SLIDERS={height:[.7,1.4],build:[.75,1.4],headSize:[.7,1.45],armLen:[.75,1.35],legLen:[.7,1.35],thick:[.6,1.6]}; // all 1 to start
 export const HAIRC=['#2a1d14','#5a3a22','#8a5a2a','#c98a3a','#e8d08a','#c94a2a','#e8e6e0','#4a5aa6','#7a3a8a','#1c1c1c'];
 export const EYES=['#3a6ab0','#4a8a3a','#6b4a2a','#c9a03a','#d94a4a','#a64ac9','#e8e8e8','#1c1c1c'];
 export const SY1=['Bal','Thor','Ely','Mor','Kae','Vex','Lun','Dra','Bri','Gim','Zan','Ori','Fen','Syl','Ruk','Ash','Tam','Quill'];
@@ -41,8 +45,11 @@ export const UPI=17.85/68; // model units per inch (base human = 5'8")
 const HEX=/^#[0-9a-f]{6}$/i;
 // A hero code with every value checked; anything missing or unknown takes the class or race default. Throws without a race and class.
 export function cleanHero(c){
+ if(c&&c.creature==='octopus')return{creature:'octopus',name:'Glowing octopus'};
  if(!c||!Object.hasOwn(RACES,c.race)||!Object.hasOwn(CLASSES,c.cls))throw new Error('That code is missing a valid race or class.');
  const R=RACES[c.race],K=CLASSES[c.cls],n={race:c.race,cls:c.cls,name:String(c.name||'').slice(0,40)};
  for(const [k,list,d] of [['hair',HAIRS,R.hair],['beard',BEARDS,R.beard||'none'],['hat',HATS,K.hat],['main',ITEMS,K.main],['off',ITEMS,K.off],['style',STYLES,K.style],['cape',CAPES,K.cape]])n[k]=list.includes(c[k])?c[k]:d;
  for(const [k,d] of [['skin',R.skins[0]],['hairC',HAIRC[0]],['eye',EYES[0]],['top',K.top],['bot',K.bot],['trim',K.trim]])n[k]=HEX.test(c[k])?c[k]:d;
+ for(const [k,list] of Object.entries(PARTS))n[k]=list.includes(c[k])?c[k]:list[0];
+ for(const [k,[lo,hi]] of Object.entries(SLIDERS)){const v=Number(c[k]??1);n[k]=Number.isFinite(v)?Math.min(hi,Math.max(lo,v)):1}
  return n}

@@ -40,6 +40,14 @@ export function effectBonuses(tokenOrEffects, round = null) {
   }, { ac: 0, attack: 0, save: 0 });
 }
 
+// A token's HP after typing "hp" or "max" in its menu: current never passes max, and an empty box removes both.
+export function editHp(token, key, text) {
+  if (String(text).trim() === "" || !Number.isFinite(Number(text))) return { hp: null, max: null };
+  const value = Math.max(key === "max" ? 1 : 0, Math.floor(Number(text))), old = token.max ?? token.hp;
+  if (key === "max") return { hp: Math.min(token.hp ?? value, value), max: value };
+  return { hp: value, max: Math.max(value, old ?? value, 1) };
+}
+
 export function damageAdjustment(tokenOrEffects, type, amount) {
   const kind = String(type || "").trim().toLowerCase(), effects = activeEffects(tokenOrEffects);
   if (effects.some((e) => e.damageImmune.includes(kind))) return { amount: 0, reason: "immune" };

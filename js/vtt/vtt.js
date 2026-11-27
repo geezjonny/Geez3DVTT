@@ -55,7 +55,7 @@ import { initLoot } from "./loot.js";
 import { initStealth } from "./stealth.js";
 import { FACE } from "./stealth-rules.js";
 import { initTable } from "./table.js";
-import { EFFECT_PRESETS, effectsOf, effectRemaining, makeEffect, damageAdjustment } from "./effects.js";
+import { EFFECT_PRESETS, effectsOf, effectRemaining, makeEffect, damageAdjustment, editHp } from "./effects.js";
 import { initExplored } from "./explored-vtt.js";
 import { visibleToPlayer } from "./visibility.js";
 
@@ -281,10 +281,16 @@ async function buildTokenMenu(menu, id, done, alive) {
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const name = t.label || id;
   menu.innerHTML = `<div><b>${esc(name)}</b></div><div>HP: ${t.hp != null ? `${t.hp} / ${t.max ?? t.hp}` : "—"}</div>`;
-  if (S.isGM && t.hp != null && !S.pcLive?.[S.tokPc?.[id]]?.hp_max) {   // GM: adjust an enemy's HP (a PC's HP lives on the sheet)
-    menu.insertAdjacentHTML("beforeend", `<div><button data-d="-1">−</button> <button data-d="1">+</button></div>`);
-    menu.addEventListener("click", (ev) => { const b = ev.target.closest("[data-d]"); if (!b) return; const k = S.tokens[id]; if (!k) return;
-      const hp = Math.max(0, Math.min(k.max ?? k.hp, k.hp + +b.dataset.d)); put(`tokens/${id}/hp`, hp); menu.children[1].textContent = `HP: ${hp} / ${k.max ?? k.hp}`; });
+  if (S.isGM && !S.pcLive?.[S.tokPc?.[id]]?.hp_max) {   // GM: type or step a token's HP (a PC with a sheet keeps it there)
+    const row = menu.children[1], box = (key, value, label) => `<input type="number" min="0" data-hp="${key}" value="${esc(value ?? "")}" placeholder="${key === "hp" ? "set" : "max"}" aria-label="${label}" style="width:3.5rem">`;
+    row.innerHTML = `HP: ${box("hp", t.hp, "Current HP")} / ${box("max", t.max ?? t.hp, "Max HP")} <button data-d="-1">−</button> <button data-d="1">+</button>`;
+    const save = (key, value) => {
+      const k = S.tokens[id]; if (!k) return;
+      const next = editHp(k, key, value); patch({ [`tokens/${id}/hp`]: next.hp, [`tokens/${id}/max`]: next.max });
+      for (const input of row.querySelectorAll("[data-hp]")) input.value = next[input.dataset.hp] ?? "";
+    };
+    row.addEventListener("change", (ev) => { const key = ev.target.dataset.hp; if (key) save(key, ev.target.value); });
+    row.addEventListener("click", (ev) => { const b = ev.target.closest("[data-d]"), k = S.tokens[id]; if (b && k?.hp != null) save("hp", Math.min(k.max ?? k.hp, k.hp + +b.dataset.d)); });
   }
   if (S.isGM) {
     const hb = document.createElement("button"); hb.textContent = t.hidden ? "Reveal to players" : "Hide from players";
@@ -308,6 +314,11 @@ async function buildTokenMenu(menu, id, done, alive) {
       if (route.length) act("Clear patrol", { patrol: null });
       act(t.sweep ? "Stop sweeping" : "Sweep side to side", { sweep: t.sweep ? null : true });
     }
+  }
+  if (S.isGM) {   // how big the token is on the table
+    const row = document.createElement("label"); row.append("Size "); const pick = document.createElement("select");
+    for (const [value, text] of [[0.5, "Tiny"], [0.75, "Small"], [1, "Medium"], [2, "Large"], [3, "Huge"], [4, "Gargantuan"]]) pick.add(new Option(text, value, false, value === (Number(t.size) || 1)));
+    pick.addEventListener("change", () => put(`tokens/${id}/size`, pick.value === "1" ? null : Number(pick.value))); row.append(pick); menu.append(row);
   }
   if (S.isGM) { const pb = document.createElement("button"); pb.textContent = "Picture…"; pb.addEventListener("click", () => { done(); openTokenPicker(id); }); menu.append(pb); }
   if (S.isGM) { const mb = document.createElement("button"); mb.textContent = "3D mini…"; mb.addEventListener("click", (ev) => { done(); miniMenu(ev, id); }); menu.append(mb); }
@@ -511,6 +522,7 @@ function miniMenu(e, id) {
     ...(Array.isArray(party) ? party : []).map((h) => [`${h?.name || "Unnamed"} (${h?.race} ${h?.cls})`, () => use(h)]),
     ["Paste hero code…", () => { const text = prompt("Paste a Blockfolk hero code (Copy code in the creator)"); if (!text) return; let code; try { code = JSON.parse(text); } catch { return toast("That is not a hero code."); } use(code); }],
     ["Open the creator", () => window.open("blockfolk.html", "_blank")],
+    ["Glowing octopus (6 eyes)", () => use({ creature: "octopus" })],
     ...(S.tokens[id]?.mini ? [["Remove mini (use picture)", () => put(`tokens/${id}/mini`, null)]] : []),
   ]);
 }

@@ -856,10 +856,11 @@ function buildToken(id, t, i) {
   g.add(base, entry.disc);
   if (t.mini) try { // an optional Blockfolk figure stands on the base instead of the floating picture
     const looks = [new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true, side: THREE.DoubleSide, ...ghost }), new THREE.MeshBasicMaterial({ vertexColors: true, ...ghost })];
-    const { group, height, pose } = makeMini(cleanHero(t.mini), looks);
-    Object.assign(entry, { mini: group, miniHeight: height, pose }); group.position.y = 0.09; g.add(group);
+    const { group, height, pose, hover } = makeMini(cleanHero(t.mini), looks);
+    Object.assign(entry, { mini: group, miniHeight: height, pose, hover }); group.position.y = 0.09; g.add(group);
   } catch (err) { console.warn("token mini", id, err.message); } // a bad code keeps the picture
-  const tag = (s, lift) => { s.userData.lift = lift; s.raycast = () => {}; entry.tags.push(s); };
+  const grow = Math.max(1, 1 / (Number(t.size) || 1)); // a small token keeps a readable name and HP bar
+  const tag = (s, lift) => { s.scale.multiplyScalar(grow); s.userData.lift = lift * grow; s.raycast = () => {}; entry.tags.push(s); };
   const hp = hpOf(id, t);
   if (hp) {
     const part = clamp(hp.hp / (hp.max || 1), 0, 1);
@@ -1182,7 +1183,7 @@ function loop(now) {
   }
   if (moving) renderer.shadowMap.needsUpdate = true;
   if (easeFog(dt)) moving = true;
-  let carried = 0;
+  let carried = 0, hovering = false;
   for (const [id, e] of tokens) {
     const t = S.tokens[id];
     if (!t?.torch || !here(t) || t.hidden || carried >= 12) continue;
@@ -1199,6 +1200,7 @@ function loop(now) {
     } else if (pos.y !== e.base) { pos.y = e.base; moving = true; }
     e.group.visible = !(fp?.id === id);
     if (e.mini && moveMini(id, e, t, now)) moving = true;
+    if (e.hover) { const floats = Q.flicker && e.posed !== "sit" && e.posed !== "sleep"; e.hover(floats ? now / 1000 : 0); hovering ||= floats; }
   }
   if (fp) { const t = S.tokens[fp.id]; if (!t) setFirstPerson(null); else { camera.position.lerp(new THREE.Vector3(t.x / U, 0.85, t.y / U), 0.35); camera.rotation.set(fp.pitch, fp.yaw, 0, "YXZ"); moving = true; } }
   const own = !S.isGM && !fp && tokens.get(walkingId)?.group.position;
@@ -1209,7 +1211,7 @@ function loop(now) {
   }
   const changed = !fp && controls.update();
   syncFlat();
-  const flame = Q.flicker && (data?.lights.length || fxLive) && now - drawn >= 32;
+  const flame = Q.flicker && (data?.lights.length || fxLive || hovering) && now - drawn >= 32;
   const quake = calm.matches ? 0 : Math.max(0, quakeUntil - now) / QUAKE_MS;
   if (quake) moving = true;
   if (!(dirty || moving || changed || anims.size || flame)) return;

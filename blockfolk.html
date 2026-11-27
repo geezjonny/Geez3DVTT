@@ -24,7 +24,7 @@ body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 Inter,system-u
 .tag{position:absolute;left:20px;bottom:18px;pointer-events:none}
 .tag b{display:block;font:700 clamp(24px,3.4vw,40px)/1.05 'Pixelify Sans',sans-serif;text-wrap:balance}
 .tag span{color:#6b5a62;font-size:15px}
-.poses{position:absolute;top:14px;left:14px;display:flex;gap:6px;flex-wrap:wrap}
+.poses{position:absolute;top:14px;left:14px;right:14px;display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;scrollbar-width:thin}.poses button{flex:none}
 .zoom{position:absolute;right:14px;bottom:14px;display:flex;flex-direction:column;gap:6px}
 .poses button,.zoom button{min-height:40px;min-width:40px;border:1px solid rgba(0,0,0,.12);background:rgba(255,255,255,.8);color:#23161d;border-radius:10px;font:600 14px Inter,sans-serif;padding:0 12px;cursor:pointer;backdrop-filter:blur(4px)}
 .poses button.on,.zoom button.on{background:var(--acc);border-color:var(--acc);color:#fff}
@@ -44,6 +44,7 @@ input[type=text]{flex:1 1 180px;min-height:46px;font:16px Inter,sans-serif;paddi
 .sw.on{outline:3px solid var(--acc);outline-offset:2px}
 .cols{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
 .cols label{font-size:13px;color:var(--muted);display:grid;gap:4px}
+.slides{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:8px}.slides label{font-size:13px;color:var(--muted);display:grid;gap:2px}input[type=range]{width:100%;min-height:32px;accent-color:var(--acc)}
 input[type=color]{width:100%;height:44px;border:1px solid var(--line);border-radius:10px;background:var(--bg);padding:3px;cursor:pointer}
 button:focus-visible,input:focus-visible,textarea:focus-visible{outline:3px solid var(--acc);outline-offset:2px}
 .sec{border-top:1px solid var(--line);margin-top:20px;padding-top:4px}
@@ -76,6 +77,17 @@ textarea{width:100%;height:180px;font:13px ui-monospace,monospace;border-radius:
     <h2>Race</h2><div class="chips" id="c-race"></div>
     <h2>Class</h2><div class="chips" id="c-cls"></div>
     <div class="sec">
+      <h2>Body</h2>
+      <div class="slides"><label>Height<input type="range" data-s="height"></label><label>Build<input type="range" data-s="build"></label><label>Head size<input type="range" data-s="headSize"></label><label>Limb thickness<input type="range" data-s="thick"></label><label>Arm length<input type="range" data-s="armLen"></label><label>Leg length<input type="range" data-s="legLen"></label></div>
+      <h2>Head</h2><div class="chips" id="c-head"></div>
+      <h2>Torso</h2><div class="chips" id="c-torso"></div>
+      <h2>Arms</h2><div class="chips" id="c-arms"></div>
+      <h2>Legs</h2><div class="chips" id="c-legs"></div>
+      <h2>Ears</h2><div class="chips" id="c-ears"></div>
+      <h2>Horns</h2><div class="chips" id="c-horns"></div>
+      <h2>Tail</h2><div class="chips" id="c-tail"></div>
+    </div>
+    <div class="sec">
       <h2>Skin</h2><div class="sws" id="c-skin"></div>
       <h2>Eyes</h2><div class="sws" id="c-eye"></div>
       <h2>Hair</h2><div class="chips" id="c-hair"></div>
@@ -85,8 +97,11 @@ textarea{width:100%;height:180px;font:13px ui-monospace,monospace;border-radius:
     <div class="sec">
       <h2>Outfit</h2><div class="chips" id="c-style"></div>
       <h2>Colours</h2>
-      <div class="cols"><label>Main<input type="color" id="k-top"></label><label>Legs<input type="color" id="k-bot"></label><label>Trim<input type="color" id="k-trim"></label></div>
+      <div class="cols"><label>Main<input type="color" id="k-top"></label><label>Legs<input type="color" id="k-bot"></label><label>Trim<input type="color" id="k-trim"></label><label>Any skin<input type="color" id="k-skin"></label><label>Any hair<input type="color" id="k-hairC"></label><label>Any eyes<input type="color" id="k-eye"></label></div>
       <h2>Headwear</h2><div class="chips" id="c-hat"></div>
+      <h2>Face</h2><div class="chips" id="c-face"></div>
+      <h2>Neck</h2><div class="chips" id="c-neck"></div>
+      <h2>Shoulders</h2><div class="chips" id="c-shoulders"></div>
       <h2>Back</h2><div class="chips" id="c-cape"></div>
       <h2>Main hand</h2><div class="chips" id="c-main"></div>
       <h2>Off hand</h2><div class="chips" id="c-off"></div>
@@ -108,7 +123,7 @@ window.addEventListener('error',e=>{const v=document.getElementById('view');if(!
 <script type="module">
 import * as THREE from "three";
 import { GLTFExporter } from "three/addons/exporters/GLTFExporter.js";
-import { RACES, CLASSES, HAIRS, BEARDS, HATS, STYLES, CAPES, ITEMS, HAIRC, EYES, SY1, SY2, UPI, cleanHero } from "./js/vtt/blockfolk-data.js";
+import { RACES, CLASSES, HAIRS, BEARDS, HATS, STYLES, CAPES, ITEMS, HAIRC, EYES, SY1, SY2, UPI, PARTS, SLIDERS, cleanHero } from "./js/vtt/blockfolk-data.js";
 import { buildHero, tex, applyPose } from "./js/vtt/blockfolk.js";
 import { EMOTES } from "./js/vtt/acts.js";
 const $=s=>document.querySelector(s);
@@ -116,6 +131,7 @@ let S={},refs={};
 const applyRace=r=>{const R=RACES[r];S.race=r;S.skin=R.skins[0];S.hair=R.hair;S.beard=R.beard||'none'};
 const applyClass=c=>{S.cls=c;Object.assign(S,CLASSES[c])};
 applyRace('Dwarf');applyClass('Fighter');Object.assign(S,{name:'Brannoc Ironvein',hairC:'#c94a2a',eye:'#3a6ab0'});
+S=cleanHero(S);
 
 const view=$('#view');
 const renderer=new THREE.WebGLRenderer({antialias:true,alpha:true});
@@ -172,27 +188,33 @@ const setZoom=f=>{zoom=Math.min(2.6,Math.max(.6,zoom*f));frame()};
 $('#zin').onclick=()=>setZoom(1.15);$('#zout').onclick=()=>setZoom(.87);
 $('#spin').onclick=e=>{spin=!spin;e.currentTarget.classList.toggle('on',spin)};
 $('#rul').onclick=e=>{ruler.visible=!ruler.visible;e.currentTarget.classList.toggle('on',ruler.visible)};
-const cap1=v=>v[0].toUpperCase()+v.slice(1);
+const COLORS=['top','bot','trim','skin','hairC','eye'];
+const NAMES={greatsword:'Great sword',towershield:'Tower shield',featherwings:'Feather wings',batwings:'Bat wings',tophat:'Top hat',horned:'Horned helm',feather:'Feather cap',chain:'Chain mail',scale:'Scale mail',studded:'Studded leather',hide:'Furs',race:'From race',auto:'From outfit',tief:'Fiend',drag:'Dragon'};
+const cap1=v=>NAMES[v]||v[0].toUpperCase()+v.slice(1);
 const POSES=['idle','walk','attack','hurt',...EMOTES.map(e=>e[1])];
 const renderPoses=()=>{$('#poses').innerHTML=POSES.map(p=>`<button data-v="${p}" class="${p===pose?'on':''}">${cap1(p)}</button>`).join('')};
 $('#poses').addEventListener('click',e=>{const b=e.target.closest('button');if(b){pose=b.dataset.v;renderPoses()}});
 
 const UI=[['c-race','race',()=>Object.keys(RACES),'chip'],['c-cls','cls',()=>Object.keys(CLASSES),'chip'],['c-skin','skin',()=>RACES[S.race].skins,'sw'],['c-eye','eye',()=>EYES,'sw'],
- ['c-hair','hair',()=>HAIRS,'chip'],['c-hairc','hairC',()=>HAIRC,'sw'],['c-beard','beard',()=>BEARDS,'chip'],['c-style','style',()=>STYLES,'chip'],['c-hat','hat',()=>HATS,'chip'],['c-cape','cape',()=>CAPES,'chip'],['c-main','main',()=>ITEMS,'chip'],['c-off','off',()=>ITEMS,'chip']];
+ ['c-hair','hair',()=>HAIRS,'chip'],['c-hairc','hairC',()=>HAIRC,'sw'],['c-beard','beard',()=>BEARDS,'chip'],['c-style','style',()=>STYLES,'chip'],['c-hat','hat',()=>HATS,'chip'],['c-cape','cape',()=>CAPES,'chip'],['c-main','main',()=>ITEMS,'chip'],['c-off','off',()=>ITEMS,'chip'],...Object.keys(PARTS).map(k=>['c-'+k,k,()=>PARTS[k],'chip'])];
 function renderUI(){
  UI.forEach(([id,key,list,kind])=>{$('#'+id).innerHTML=list().map(v=>kind==='sw'?`<button class="sw${v===S[key]?' on':''}" data-v="${v}" style="--c:${v}" aria-label="${key} ${v}"></button>`:`<button class="chip${v===S[key]?' on':''}" data-v="${v}">${cap1(v)}</button>`).join('')});
- ['top','bot','trim'].forEach(k=>$('#k-'+k).value=S[k]);
+ COLORS.forEach(k=>$('#k-'+k).value=S[k]);
+ document.querySelectorAll('[data-s]').forEach(r=>{const k=r.dataset.s,[lo,hi]=SLIDERS[k];r.min=lo;r.max=hi;r.step=.05;r.value=S[k]??1});
  $('#name').value=S.name;$('#nm').textContent=S.name||'Unnamed hero';{const i=Math.round((refs.body||17.85)/UPI);$('#sub').textContent=`${S.race} ${S.cls} · ${Math.floor(i/12)}′${i%12}″`}
 }
 function update(){build();renderUI();frame()}
 UI.forEach(([id,key])=>$('#'+id).addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;const v=b.dataset.v;
  if(key==='race')applyRace(v);else if(key==='cls')applyClass(v);else S[key]=v;update()}));
-let pend=0;['top','bot','trim'].forEach(k=>$('#k-'+k).addEventListener('input',e=>{S[k]=e.target.value;if(!pend)pend=requestAnimationFrame(()=>{pend=0;build()})}));
+let pend=0;const redraw=()=>{if(!pend)pend=requestAnimationFrame(()=>{pend=0;update()})};
+COLORS.forEach(k=>$('#k-'+k).addEventListener('input',e=>{S[k]=e.target.value;redraw()}));
+document.querySelectorAll('[data-s]').forEach(r=>r.addEventListener('input',()=>{S[r.dataset.s]=Number(r.value);redraw()}));
 $('#name').addEventListener('input',e=>{S.name=e.target.value;$('#nm').textContent=S.name||'Unnamed hero'});
 const pick=a=>a[Math.random()*a.length|0];
 $('#rand').onclick=()=>{applyRace(pick(Object.keys(RACES)));applyClass(pick(Object.keys(CLASSES)));const R=RACES[S.race];
  S.skin=pick(R.skins);S.hair=Math.random()<.6?R.hair:pick(HAIRS);S.hairC=pick(HAIRC);S.eye=pick(EYES);
- S.beard=R.beard||(Math.random()<.25?pick(BEARDS):'none');if(Math.random()<.3)S.hat=pick(HATS);if(Math.random()<.25)S.cape=pick(CAPES);S.name=pick(SY1)+pick(SY2);boost=.35;update()};
+ S.beard=R.beard||(Math.random()<.25?pick(BEARDS):'none');
+ for(const [k,list] of Object.entries(PARTS))S[k]=Math.random()<.12?pick(list):list[0];for(const k of Object.keys(SLIDERS))S[k]=Math.random()<.3?Math.round((.85+Math.random()*.3)*20)/20:1;if(Math.random()<.3)S.hat=pick(HATS);if(Math.random()<.25)S.cape=pick(CAPES);S.name=pick(SY1)+pick(SY2);boost=.35;update()};
 
 let party=[];try{party=JSON.parse(localStorage.getItem('blockfolk-party')||'[]');if(!Array.isArray(party))party=[]}catch(e){party=[]}
 const saveParty=()=>{try{localStorage.setItem('blockfolk-party',JSON.stringify(party))}catch(e){}};
