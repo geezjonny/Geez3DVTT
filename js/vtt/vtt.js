@@ -36,6 +36,7 @@ import { initRollCall } from "./rollcall.js";
 import { initAtmosphere } from "./atmosphere.js";
 import { openTokenPicker } from "./tokenpics.js";
 import { cleanHero } from "./blockfolk-data.js";
+import { companionAct, EMOTES, SAYS, restOf } from "./acts.js";
 import { openInventory } from "./inventory.js";
 import { openEquipment } from "./equipment.js";
 import { initMapImage } from "./mapimg.js";
@@ -333,6 +334,13 @@ async function buildTokenMenu(menu, id, done, alive) {
     menu.append(d);
   }
   if (S.isGM) addFields(menu, settingsFor("token", id).fields);
+  if (S.isGM || (canMove(id) && !S.paused)) {   // your own token: speech bubbles, and poses if it has a mini
+    const d = document.createElement("details"); d.innerHTML = "<summary>Emote</summary>";
+    const row = (list) => { const box = document.createElement("div"); box.className = "emotes"; for (const [text, what] of list) { const b = document.createElement("button"); b.textContent = text; b.addEventListener("click", () => { done(); const now = S.tokens[id]; if (!now) return; const sitting = restOf(S.acts?.[id], now) ? S.acts[id] : {}; sendAct(id, what.act ? { ...what, x: now.x, y: now.y } : { ...sitting, ...what }); }); box.append(b); } d.append(box); };
+    row(SAYS.map((say) => [say, { say }]));
+    if (t.mini) row([...(restOf(S.acts?.[id], t) ? [["Stand up", { act: "stand" }]] : []), ...EMOTES.map(([text, act]) => [text, { act }])]);
+    menu.append(d);
+  }
   if (S.isGM) {   // Attack > weapon / cantrip / spell, then aim on the map (attack.js)
     const ab = document.createElement("button"); ab.textContent = "⚔ Attack…";
     ab.addEventListener("click", async (ev) => { const opts = await attackOptions(t, await pcIdFor(t)); showAttackMenu(ev, id, opts); }); menu.append(ab);
@@ -394,9 +402,27 @@ function groundMenu(e, p) {
   const fl = floorAt(p);
   if (fl) { e.preventDefault(); showActionMenu(e, "Floor", [["Replace all like this...", () => openReplace({ category: "floor", from: S.map.floors[fl]?.mat || "" })], ["Delete", () => put(`map/floors/${fl}`, null)]], settingsFor("floor", fl).fields); }
 }
+// Token animations and attack effects everyone sees: acts/<token id> = the latest one.
+const sendAct = (id, what) => rawPut(`acts/${id}`, { ...what, n: Date.now() + Math.random() }).catch((err) => console.warn("animation not shared", err));   // not part of undo
+{
+  let seen = null;   // what is there on opening is old news
+  watch("acts", (v) => {
+    const first = !seen; seen ||= new Map(); S.acts = v || {};   // resting poses are read from here
+    for (const [id, a] of Object.entries(v || {})) { if (seen.get(id) === a?.n) continue; seen.set(id, a?.n); if (!first) S.v3d?.playAct(id, a); }
+  });
+  const tried = new Map();   // character -> attacks rolled to hit
+  document.addEventListener("companionroll", async ({ detail: { character, name, label } }) => {
+    if (!S.isGM) return;   // one screen translates the roll for everyone
+    const id = Object.keys(S.tokens).find((k) => S.tokPc?.[k] === character || S.tokens[k].pc === character) || Object.keys(S.tokens).find((k) => isPcToken(S.tokens[k]) && String(S.tokens[k].label).toLowerCase() === String(name).toLowerCase());
+    if (!id) return;
+    if (!tried.has(character)) tried.set(character, new Set());
+    const what = companionAct(label, await sheetOf(S.tokens[id], character), tried.get(character));
+    if (what) setTimeout(() => sendAct(id, what), 2000);   // after the dice land
+  });
+}
 // Attack picker: one row per weapon / cantrip / spell; picking one starts aiming on the map.
 function showAttackMenu(e, id, opts) {
-  const hooks = { applyDamage: applyTokenDamage, sheetFor: async (tid) => sheetOf(S.tokens[tid], await pcIdFor(S.tokens[tid])) };
+  const hooks = { act: sendAct, applyDamage: applyTokenDamage, sheetFor: async (tid) => sheetOf(S.tokens[tid], await pcIdFor(S.tokens[tid])) };
   showActionMenu(e, `${S.tokens[id]?.label || id} attacks`, opts.map((o) => [`${o.group === "Weapons" ? "⚔" : "✦"} ${o.label}${o.group.startsWith("Level") ? ` (L${o.level})` : o.group === "Cantrips" ? " (cantrip)" : ""}${o.dmg ? ` · ${o.dmg}` : ""}`, () => beginAttack(id, o, hooks)]));
 }
 // Damage from an attack: an enemy token's own HP, or a PC's sheet (temp HP soaks it first).

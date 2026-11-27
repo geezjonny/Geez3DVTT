@@ -5,6 +5,11 @@ What changed in Geez3DVTT, newest first.
 ## 2026-11-27
 
 ### Token minis (optional)
+- **Minis move:** they walk the way they are going, swing when an attack lands and flinch when HP drops.
+- **Attack effects** for every token: a slash for weapons, a flash for spells and cantrips, and a small camera shake
+  (off if the system asks for reduced motion). Player rolls reach the table while the GM page is open.
+- **Emote** (right-click your token): speech bubbles on any token; for minis, wave, cheer, dance, bow, point, yes, no,
+  laugh, shrug, facepalm, jump, flex, cry, fart, and sit or sleep until you move.
 - **Blockfolk heroes can stand on tokens:** right-click a token, **3D mini…**, and pick a saved hero or paste its code.
   Pictures stay the default, top-down still shows them, and **Remove mini** switches back.
 - **The Blockfolk character creator** is included as `blockfolk.html`.

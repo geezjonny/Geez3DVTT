@@ -13,8 +13,9 @@ import { isCurrentlyVisible } from "./explored-vtt.js";
 import { getRefImage } from "./refimage.js";
 import { doorSeg } from "./reach.js";
 import { doorKind } from "./door-segment.js";
-import { miniParts } from "./blockfolk.js";
+import { makeMini } from "./blockfolk.js";
 import { cleanHero } from "./blockfolk-data.js";
+import { SAYS, restOf, RESTS } from "./acts.js";
 import { CONDITIONS, conditionsOf } from "./conditions.js";
 import { propParts } from "./propmodels.js";
 import { SOURCES, statesOf, startOf } from "../puzzle/objects.js";
@@ -854,11 +855,9 @@ function buildToken(id, t, i) {
   entry.picture = flat(art, 0.82, 0.82);
   g.add(base, entry.disc);
   if (t.mini) try { // an optional Blockfolk figure stands on the base instead of the floating picture
-    const { parts, height } = miniParts(cleanHero(t.mini));
-    entry.mini = new THREE.Group(); entry.mini.position.y = 0.09; entry.miniHeight = height;
     const looks = [new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true, side: THREE.DoubleSide, ...ghost }), new THREE.MeshBasicMaterial({ vertexColors: true, ...ghost })];
-    parts.forEach((geo, k) => { if (geo) entry.mini.add(new THREE.Mesh(geo, looks[k])); else looks[k].dispose(); });
-    g.add(entry.mini);
+    const { group, height, pose } = makeMini(cleanHero(t.mini), looks);
+    Object.assign(entry, { mini: group, miniHeight: height, pose }); group.position.y = 0.09; g.add(group);
   } catch (err) { console.warn("token mini", id, err.message); } // a bad code keeps the picture
   const tag = (s, lift) => { s.userData.lift = lift; s.raycast = () => {}; entry.tags.push(s); };
   const hp = hpOf(id, t);
@@ -897,11 +896,100 @@ function syncTokens() {
     const base = (lvOf(t) - nowLv()) * floorGap();
     if (e.base !== base) { e.base = base; e.group.position.set(t.x / U, base, t.y / U); dirty = true; }
     e.group.position.y = base;
-    const turn = t.face == null ? 0 : Math.PI / 2 - t.face * Math.PI / 180; // figures face the viewer; guards face where they look
-    if (e.mini && e.mini.rotation.y !== turn) { e.mini.rotation.y = turn; dirty = true; }
+    flinch(id, t);
   });
-  for (const [id, e] of tokens) if (!seen.has(id)) { tokenRoot.remove(e.group); disposeTree(e.group); tokens.delete(id); dirty = true; }
+  for (const [id, e] of tokens) if (!seen.has(id)) { tokenRoot.remove(e.group); disposeTree(e.group); tokens.delete(id); health.delete(id); dirty = true; }
   for (const { a, m } of roofs) { const inside = Object.values(S.tokens).some((t) => isPcToken(t) && !t.hidden && here(t) && t.x >= a.x && t.x <= a.x + a.w && t.y >= a.y && t.y <= a.y + a.h); const show = !!fp || !inside; if (m.visible !== show) { m.visible = show; dirty = true; renderer.shadowMap.needsUpdate = true; } }
+}
+
+/* ---------------- minis move, and attacks flash ---------------- */
+const ACTS = { attack: 770, wave: 2200, cheer: 2000, dance: 3200, hurt: 500, cry: 3000, fart: 1400, bow: 1600, point: 1800, yes: 1400, no: 1400, laugh: 2200, shrug: 1600, facepalm: 2200, jump: 900, flex: 2200 }; // ms
+const health = new Map(); // token id -> what its HP was, to flinch when it drops
+function flinch(id, t) {
+  const sheet = S.pcLive?.[S.tokPc?.[id]], from = sheet?.hp_max ? "sheet" : "token", hp = sheet?.hp_max ? Number(sheet.hp_current ?? sheet.hp_max) + Number(sheet.temp_hp || 0) : t.hp;
+  const was = health.get(id); health.set(id, { from, hp });
+  if (was?.from === from && hp < was.hp) playAct(id, { act: "hurt" });
+}
+const motion = new Map(); // token id -> { heading, until, act, since }; kept across rebuilds
+// Walking wins over anything else; otherwise the figure stands still, facing the way it last walked (a guard: where it looks).
+function moveMini(id, e, t, now) {
+  const m = motion.get(id) || {}, walking = now < m.until;
+  if (m.act && (walking || now - m.since >= ACTS[m.act])) m.act = null;
+  const record = S.acts?.[id], rest = restOf(record, t);
+  if (!rest && RESTS.includes(record?.act)) { delete S.acts[id]; if (S.isGM) put(`acts/${id}`, null); } // moved off: up for good
+  const name = walking ? "walk" : m.act || rest, turn = !walking && t.face != null ? Math.PI / 2 - t.face * Math.PI / 180 : m.heading || 0;
+  if ((!name || name === rest) && e.posed === name && e.mini.rotation.y === turn) return false; // still, or resting
+  e.mini.rotation.y = turn; e.posed = name; e.pose(name, walking ? now / 1000 : (now - (m.since || 0)) / 1000);
+  if (e.zzz) { e.group.remove(e.zzz); e.zzz.material.map.dispose(); e.zzz.material.dispose(); e.zzz = null; }
+  if (name === "sleep") { e.zzz = new THREE.Sprite(new THREE.SpriteMaterial({ map: canvasTexture(128, 128, emoji("💤")), transparent: true, depthWrite: false, fog: false })); e.zzz.position.set(0.2, 0.7, 0); e.zzz.scale.setScalar(0.4); e.zzz.raycast = () => {}; e.group.add(e.zzz); }
+  return true;
+}
+// A one-off on a token this screen can see: an animation for its mini and/or a light effect where it stands.
+export function playAct(id, { act, fx, say } = {}) {
+  if (!isOpen() || !tokens.has(id)) return;
+  if (SAYS.includes(say)) bubble(id, say);
+  if (act === "stand" || RESTS.includes(act)) motion.set(id, { ...motion.get(id), act: null }); // moveMini shows the rest itself
+  if (Object.hasOwn(ACTS, act)) motion.set(id, { ...motion.get(id), act, since: performance.now() });
+  const flashes = fx === "slash" || fx === "magic";
+  if (act === "cry") tears(id);
+  if (act === "fart") setTimeout(() => stink(id), 400);
+  if (flashes || act === "attack") setTimeout(() => { // lands with the swing
+    const e = tokens.get(id); if (!e) return;
+    if (flashes) flash(e.group.position, fx);
+    quakeUntil = performance.now() + QUAKE_MS; dirty = true;
+  }, act === "attack" ? 420 : 0);
+  dirty = true;
+}
+const QUAKE_MS = 260, calm = matchMedia("(prefers-reduced-motion: reduce)"); // no shake for people who turn motion off
+let quakeUntil = 0;
+// A short-lived picture in the scene; `frame` moves it as k runs from 0 to 1.
+function showFx(draw, ms, frame, blending = THREE.NormalBlending) {
+  const map = canvasTexture(128, 128, draw);
+  const material = new THREE.SpriteMaterial({ map, transparent: true, opacity: 0, depthTest: false, depthWrite: false, blending, fog: false }), s = new THREE.Sprite(material);
+  s.renderOrder = 13; s.raycast = () => {}; fxRoot.add(s);
+  const t0 = performance.now(), step = () => {
+    const k = (performance.now() - t0) / ms;
+    if (k >= 1) { fxRoot.remove(s); material.dispose(); map.dispose(); anims.delete(step); dirty = true; return; }
+    frame(k, s, material);
+  };
+  step(); anims.add(step);
+}
+const glowSpot = (g, x, y, r, inner, mid) => { const c = g.createRadialGradient(x, y, 0, x, y, r); c.addColorStop(0, inner); c.addColorStop(0.5, mid); c.addColorStop(1, "rgba(0,0,0,0)"); g.fillStyle = c; g.fillRect(x - r, y - r, r * 2, r * 2); };
+function flash(at, kind) {
+  const slash = kind === "slash", { x, y, z } = at;
+  showFx((g) => {
+    if (slash) { g.shadowColor = "#bfe0ff"; g.shadowBlur = 10; g.fillStyle = "#f4f9ff"; g.beginPath(); g.arc(64, 70, 54, Math.PI * 1.08, Math.PI * 1.92); g.arc(64, 90, 56, Math.PI * 1.82, Math.PI * 1.18, true); g.fill(); return; }
+    glowSpot(g, 64, 64, 62, "rgba(230,215,255,0.9)", "rgba(140,100,255,0.35)");
+    g.fillStyle = "#fff"; for (let i = 0; i < 9; i++) { const a = i * 2.4, d = 22 + (i % 3) * 13; g.beginPath(); g.arc(64 + Math.cos(a) * d, 64 + Math.sin(a) * d, 2.5, 0, 7); g.fill(); }
+  }, slash ? 350 : 600, (k, s, material) => {
+    s.position.set(x, y + 0.75, z); material.opacity = (slash ? 0.55 : 0.75) * Math.sin(Math.PI * (0.15 + 0.85 * k));
+    if (slash) { material.rotation = 1.1 - 2.2 * k; s.scale.setScalar(1.25); } else s.scale.setScalar(0.7 + k);
+  }, THREE.AdditiveBlending);
+}
+const emoji = (text) => (g) => { g.font = "84px system-ui, 'Segoe UI Emoji'"; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText(text, 64, 70); };
+// A speech bubble that pops up over any token and fades.
+function bubble(id, text) {
+  showFx((g) => { g.fillStyle = "#fffaf0"; g.beginPath(); g.arc(64, 60, 54, 0, 7); g.moveTo(46, 108); g.lineTo(64, 127); g.lineTo(78, 108); g.fill(); g.save(); g.translate(13, 8); g.scale(0.8, 0.8); emoji(text)(g); g.restore(); }, 2600, (k, s, material) => {
+    const e = tokens.get(id); material.opacity = e ? Math.min(1, (1 - k) * 4) : 0; if (!e) return;
+    const p = e.group.position; s.position.set(p.x, p.y + (e.mini ? e.miniHeight : 1.05) + 0.65, p.z); s.scale.setScalar(0.55 * Math.min(1, 0.4 + k * 8));
+  });
+}
+// A tear falling from each eye, a few times over.
+function tears(id) {
+  const e = tokens.get(id); if (!e?.mini) return;
+  showFx((g) => { g.fillStyle = "#8fd0ff"; for (const x of [44, 84]) { g.beginPath(); g.moveTo(x, 44); g.quadraticCurveTo(x + 11, 66, x, 72); g.quadraticCurveTo(x - 11, 66, x, 44); g.fill(); } }, ACTS.cry, (k, s, material) => {
+    const drop = (k * 4) % 1, p = e.group.position;
+    s.position.set(p.x, p.y + e.miniHeight * 0.82 - drop * 0.35, p.z); s.scale.setScalar(0.5); material.opacity = 0.95 * (1 - drop);
+  });
+}
+// A small green cloud drifting out behind.
+function stink(id) {
+  const e = tokens.get(id); if (!e?.mini) return;
+  const p = e.group.position.clone(), back = e.mini.rotation.y + Math.PI;
+  showFx((g) => { for (const [x, y, r] of [[48, 70, 34], [80, 62, 30], [66, 46, 24]]) glowSpot(g, x, y, r, "rgba(170,210,60,0.85)", "rgba(120,160,40,0.45)"); }, 1300, (k, s, material) => {
+    const d = 0.25 + k * 0.45;
+    s.position.set(p.x + Math.sin(back) * d, p.y + 0.5 + k * 0.3, p.z + Math.cos(back) * d); s.scale.setScalar(0.35 + k * 0.7); material.opacity = 0.9 * (1 - k);
+  });
 }
 
 /* ---------------- camera ---------------- */
@@ -1106,9 +1194,11 @@ function loop(now) {
     const p = e.drag || t, tx = p.x / U, tz = p.y / U, pos = e.group.position, far = Math.hypot(tx - pos.x, tz - pos.z);
     if (far > 0.002) {
       const k = id === walkingId || e.drag || far > 4 ? 1 : Math.min(1, dt * 12); // others glide between network updates
-      pos.x += (tx - pos.x) * k; pos.z += (tz - pos.z) * k; pos.y = e.base + (far > 0.01 && k < 1 ? Math.abs(Math.sin(now / 70)) * 0.04 : 0); moving = true;
+      if (e.mini && far <= 4) motion.set(id, { ...motion.get(id), heading: Math.atan2(tx - pos.x, tz - pos.z), until: now + 350 }); // not for a jump across the map
+      pos.x += (tx - pos.x) * k; pos.z += (tz - pos.z) * k; pos.y = e.base + (!e.mini && far > 0.01 && k < 1 ? Math.abs(Math.sin(now / 70)) * 0.04 : 0); moving = true;
     } else if (pos.y !== e.base) { pos.y = e.base; moving = true; }
     e.group.visible = !(fp?.id === id);
+    if (e.mini && moveMini(id, e, t, now)) moving = true;
   }
   if (fp) { const t = S.tokens[fp.id]; if (!t) setFirstPerson(null); else { camera.position.lerp(new THREE.Vector3(t.x / U, 0.85, t.y / U), 0.35); camera.rotation.set(fp.pitch, fp.yaw, 0, "YXZ"); moving = true; } }
   const own = !S.isGM && !fp && tokens.get(walkingId)?.group.position;
@@ -1120,6 +1210,8 @@ function loop(now) {
   const changed = !fp && controls.update();
   syncFlat();
   const flame = Q.flicker && (data?.lights.length || fxLive) && now - drawn >= 32;
+  const quake = calm.matches ? 0 : Math.max(0, quakeUntil - now) / QUAKE_MS;
+  if (quake) moving = true;
   if (!(dirty || moving || changed || anims.size || flame)) return;
   if (choice === "auto" && level !== "low" && document.hasFocus() && now - builtAt > 2500 && gap < 1000) {
     slow = Math.max(0, slow + (gap > 100 ? 8 : gap > 36 ? 1 : -1));
@@ -1128,8 +1220,12 @@ function loop(now) {
   U3.uTime.value = now / 1000;
   const reach = fp ? 14 : camera.position.distanceTo(controls.target);
   scene.fog.near = reach; scene.fog.far = reach * 2.8; U3.uPx.value = renderer.domElement.height;
+  // a small shake after an attack or spell: moved only for this picture, so your view stays where you put it
+  const jolt = quake ? new THREE.Vector3(Math.sin(now / 17), Math.sin(now / 13 + 2), 0).multiplyScalar(0.005 * reach * quake).applyQuaternion(camera.quaternion) : null;
+  if (jolt) camera.position.add(jolt);
   renderer.render(scene, camera);
-  dirty = false; drawn = now;
+  if (jolt) camera.position.sub(jolt);
+  dirty = !!jolt; drawn = now; // one more frame to settle
   host.dataset.stats = `${level} ${renderer.info.render.calls} draws ${Math.round(renderer.info.render.triangles / 1000)}k tris`;
 }
 

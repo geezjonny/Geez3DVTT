@@ -140,10 +140,12 @@ async function resolve(tokenId, opt, targets, cell, hooks) {
   const add = (text, fn, cls) => { const b = document.createElement("button"); b.textContent = text; if (cls) b.className = cls; b.addEventListener("click", () => fn(b)); btns.append(b); return b; };
   const line = (text, cls) => { const d = document.createElement("div"); d.textContent = text; if (cls) d.className = cls; body.append(d); return d; };
   add("Done", closeCard, "atk-done");
-  let crit = false;
+  let crit = false, landed = false;
+  const fx = opt.spell ? "magic" : "slash";
 
   const damage = async (btn) => {
-    btn?.remove(); const { dice, mod } = parseDice(opt.dmg); if (!dice.length) return line("No damage dice on this one.");
+    btn?.remove(); if (opt.roll && !landed) { landed = true; hooks.act?.(tokenId, { act: "attack" }); }   // the GM ruled it a hit
+    const { dice, mod } = parseDice(opt.dmg); if (!dice.length) return line("No damage dice on this one.");
     const list = crit ? [...dice, ...dice] : dice, r = await rollDice(list, mod, () => ({ by: att }));
     await wait(2600);
     line(`Damage: ${r.total} ${opt.dmgType}${crit ? " (critical)" : ""}  [${r.dice.map((d) => d.result).join(", ")}${mod ? sign(mod) : ""}]`, "atk-big");
@@ -160,15 +162,20 @@ async function resolve(tokenId, opt, targets, cell, hooks) {
     const r = await rollDice([20], attackBonus, () => ({ by: att })), nat = r.dice[0].result; await wait(2600);
     crit = nat === 20;
     line(`Attack: ${r.total} (d20 ${nat}${sign(attackBonus)})${nat === 20 ? " — natural 20!" : nat === 1 ? " — natural 1" : ""}`, "atk-big");
+    landed = nat === 20;
     for (const id of targets) {
       const sh = await hooks.sheetFor(id), baseAc = sh?.combat?.ac, ac = baseAc == null ? null : Number(baseAc) + effectBonuses(S.tokens[id]?.effects).ac;
+      if (ac != null && nat !== 1 && r.total >= ac) landed = true;
       if (ac != null) line(`${nameOf(id)} AC ${ac}: ${nat === 20 || (nat !== 1 && r.total >= ac) ? "HIT" : "MISS"}`, nat === 20 || (nat !== 1 && r.total >= ac) ? "atk-hit" : "atk-miss");
     }
+    hooks.act?.(tokenId, landed ? { act: "attack", fx } : { fx });
     if (opt.dmg) add(`Roll damage ${diceText(opt.dmg)}${crit ? " (crit)" : ""}`, damage);
   } else if (opt.save) {
+    hooks.act?.(tokenId, { fx });
     line(`${opt.save.abil} save, DC ${opt.save.dc || "?"}${opt.save.success === "half" ? " (half on success)" : ""} — ${targets.length} in the area`, "atk-big");
     if (opt.dmg) add(`Roll damage ${diceText(opt.dmg)}`, damage);
   } else {
+    hooks.act?.(tokenId, { fx });
     line(`${opt.name} cast${opt.dmg ? "" : " — no damage to roll"}.`);
     if (opt.dmg) add(`Roll damage ${diceText(opt.dmg)}`, damage);
   }

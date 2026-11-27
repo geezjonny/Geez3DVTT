@@ -101,6 +101,7 @@ function watchCompanion() {
       known.add(id); if (first) continue;
       const dice = Object.values(c.dice || {}).map((d) => ({ sides: d.s, result: d.v }));
       const r = { id, by: c.name || "Player", sub: c.label || "Roll", total: c.total, nat: c.nat, dice, mod: 0, ts: Date.now() };   // our clock, not the phone's
+      document.dispatchEvent(new CustomEvent("companionroll", { detail: { character, name: c.name, label: c.label } }));
       companionItems[r.id] = r; renderHistory(); if (dice.length) animateRoll(r); else win.show();
     }
   });

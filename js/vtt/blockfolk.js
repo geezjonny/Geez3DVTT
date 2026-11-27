@@ -101,7 +101,7 @@ export function buildHero(hero){
   else if(bare&&s<0)sph(sh,.65*wa,'#e2d7c6',s*.06,.18,0,1.2,.8,1.2);
   return{sh,el,wr,hand:grp(wr,0,-.55,0),s}});
  // faceless faceted head (narrow egg, reference proportions)
- const neck=grp(model,0,hipY+5.15,0);
+ const neck=refs.neck=grp(model,0,hipY+5.15,0);
  T(neck,[[-.25,.44,.42],[.7,.37,.38,0,.04]],{n:6,cols:[sk]});
  const head=refs.head=grp(neck,0,.62,0);head.scale.set(.82*hk,1.04*hk,.9*hk);
  const jaw=S.beard==='stubble'?mix(sk,hc,.35):sk;
@@ -166,24 +166,80 @@ export function buildHero(hero){
  return{model,refs}
 }
 
-// A standing hero for the table, merged into two draws (lit and glowing), a human about 1.15 squares tall.
-const minis = new Map();
-export function miniParts(hero) {
-  const key = JSON.stringify(hero);
-  if (minis.has(key)) return minis.get(key);
-  const { model, refs: r } = buildHero(hero), lit = [], glowing = [];
-  r.arms.forEach((a, i) => { a.sh.rotation.set(r.fwd[i] ? -0.25 : 0, 0, a.s * 0.1); a.el.rotation.set(r.fwd[i] ? -0.7 : -0.12, 0, 0); });
-  model.updateMatrixWorld(true);
-  const size = 1.15 / (68 * UPI), fit = new THREE.Matrix4().makeScale(size, size, size);
-  model.traverse((o) => {
-    if (!o.isMesh) return;
+// Poses a hero's limbs and neck t seconds into idle or an animation. Returns how high the body hops (y), how far a cape lifts (cw)
+// slides forward (z), leans (tilt), sways and turns (spin).
+export function applyPose(r,pose,t){const [A,B]=r.arms,[L0,L1]=r.legs;
+ r.arms.forEach((a,i)=>{const f=r.fwd[i];a.sh.rotation.set(f?-.25:0,0,a.s*.1);a.el.rotation.set(f?-.7:-.12,0,0)});
+ r.legs.forEach(l=>{l.hip.rotation.set(0,0,0);l.knee.rotation.x=0});r.neck.rotation.set(0,0,0);
+ let y=0,z=0,cw=0,tilt=0,sway=0,spin=0;
+ const once=d=>(t%d)/d,ease=d=>Math.min(1,once(d)*5,(1-once(d))*5),hipY=L0.hip.position.y; // ease: into a held pose and out again
+ const free=r.fwd[0]&&!r.fwd[1]?B:A,toFace=a=>{if(r.fwd[r.arms.indexOf(a)])return;a.sh.rotation.set(-1.15,0,-a.s*.12);a.el.rotation.set(-1.75,0,0)}; // a hand holding a blade stays down
+ if(pose==='walk'){const w=Math.sin(t*5);L0.hip.rotation.x=w*.5;L1.hip.rotation.x=-w*.5;L0.knee.rotation.x=Math.max(0,w)*.9;L1.knee.rotation.x=Math.max(0,-w)*.9;
+  A.sh.rotation.x+=-w*.4;B.sh.rotation.x+=w*.4;A.el.rotation.x-=.2;B.el.rotation.x-=.2;y=Math.abs(Math.cos(t*5))*.18;cw=.35}
+ else if(pose==='attack'){const p=(t*1.3)%1,a=p<.6?-2.4*Math.sin(p/.6*Math.PI/2):-2.4+2.9*Math.min(1,(p-.6)/.25);A.sh.rotation.x=-.25+a;A.el.rotation.x=-.5;L0.hip.rotation.x=.25;L1.hip.rotation.x=-.3;L0.knee.rotation.x=.3;cw=.1}
+ else if(pose==='wave'){A.sh.rotation.set(0,0,-2.55);A.el.rotation.set(0,0,-.5+Math.sin(t*7)*.4)}
+ else if(pose==='cheer'){const w=Math.sin(t*5);[A,B].forEach(a=>{a.sh.rotation.set(-2.9,0,a.s*.25);a.el.rotation.set(-.2,0,0)});y=Math.max(0,w)*.6;cw=.15}
+ else if(pose==='dance'){const w=Math.sin(t*8);r.arms.forEach((a,i)=>{a.sh.rotation.set(0,0,a.s*(1.5+(i?-w:w)*.8));a.el.rotation.set(-.5,0,0)});
+  r.legs.forEach((l,i)=>{const k=Math.max(0,i?-w:w);l.hip.rotation.x=-k*.45;l.knee.rotation.x=k*.9});r.neck.rotation.z=w*.15;y=Math.abs(w)*.35;sway=Math.sin(t*4)*.14;spin=Math.sin(t*2)*.6;cw=.2}
+ else if(pose==='hurt'){const k=Math.sin(Math.PI*(t%.5)/.5);r.arms.forEach(a=>{a.sh.rotation.x-=.5*k;a.sh.rotation.z+=a.s*.6*k});r.legs.forEach(l=>{l.hip.rotation.x=-.2*k;l.knee.rotation.x=.4*k});r.neck.rotation.x=-.35*k;tilt=-.3*k;y=-.15*k}
+ else if(pose==='bow'){const k=ease(1.6);tilt=.55*k;r.neck.rotation.x=.25*k;free.sh.rotation.set(-.7*k,0,-free.s*.45*k);free.el.rotation.x=-1.3*k}
+ else if(pose==='point'){const k=ease(1.8);free.sh.rotation.set(-1.55*k,0,0);free.el.rotation.set(0,0,0);tilt=.08*k}
+ else if(pose==='yes'){r.neck.rotation.x=Math.sin(t*13)*.35}
+ else if(pose==='no'){r.neck.rotation.y=Math.sin(t*13)*.6}
+ else if(pose==='laugh'){const w=Math.abs(Math.sin(t*14));r.arms.forEach(a=>{a.sh.rotation.z+=a.s*.25;a.el.rotation.x=-1});r.neck.rotation.x=-.4+w*.1;tilt=-.14;y=w*.18}
+ else if(pose==='shrug'){const k=ease(1.6);r.arms.forEach(a=>{a.sh.rotation.set(-.2*k,0,a.s*(.1+.8*k));a.el.rotation.set(-1.2*k,0,a.s*.5*k)});r.neck.rotation.z=.25*k;y=.15*k}
+ else if(pose==='facepalm'){toFace(free);r.neck.rotation.x=.35;tilt=.06}
+ else if(pose==='jump'){const h=Math.sin(Math.PI*once(.9));r.arms.forEach(a=>a.sh.rotation.set(0,0,a.s*(.1+2.4*h)));r.legs.forEach(l=>{l.hip.rotation.x=-.4*h;l.knee.rotation.x=.8*h});y=h*3.5;cw=.3*h}
+ else if(pose==='flex'){const k=ease(2.2),p=Math.sin(t*9)*.12;r.arms.forEach(a=>{a.sh.rotation.set(0,0,a.s*(.1+1.45*k));a.el.rotation.set(0,0,a.s*(1.6+p)*k)});r.neck.rotation.x=-.15*k;tilt=-.1*k}
+ else if(pose==='sit'){r.legs.forEach(l=>{l.hip.rotation.set(-1.5,0,l.s*.18);l.knee.rotation.x=.1});y=.9-hipY;z=-hipY*.35}
+ else if(pose==='sleep'){tilt=-Math.PI/2;y=1.1;z=hipY*.9;r.arms.forEach(a=>a.sh.rotation.set(0,0,a.s*.25));r.neck.rotation.z=.3}
+ else if(pose==='cry'){r.arms.forEach(toFace);r.neck.rotation.x=.4+Math.sin(t*14)*.04;tilt=.08;sway=Math.sin(t*14)*.025}
+ else if(pose==='fart'){const k=Math.sin(Math.PI*Math.min(1,(t%1.4)/1.1));r.arms.forEach(a=>{a.sh.rotation.z+=a.s*.45*k});r.legs.forEach(l=>{l.hip.rotation.x=-.55*k;l.knee.rotation.x=1*k});r.neck.rotation.x=-.2*k;tilt=.25*k;y=-1*k}
+ else{const w=Math.sin(t*1.6);A.sh.rotation.z+=-w*.02;B.sh.rotation.z+=w*.02}
+ return{y,z,cw,tilt,sway,spin}}
+
+// ---- minis for the table: a human about 1.15 squares tall ----
+const SIZE = 1.15 / (68 * UPI), heroes = new Map();
+// One geometry for lit faces and one for glowing ones; `at` places each mesh.
+function bake(meshes, at) {
+  const lit = [], glowing = [];
+  for (const o of meshes) {
     const g = o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone(), glows = o.material.isMeshBasicMaterial;
     g.deleteAttribute("uv");
     if (glows) { const c = o.material.color; g.setAttribute("color", new THREE.Float32BufferAttribute(Array.from({ length: g.attributes.position.count }, () => [c.r, c.g, c.b]).flat(), 3)); }
-    (glows ? glowing : lit).push(g.applyMatrix4(o.matrixWorld).applyMatrix4(fit));
-    o.geometry.dispose();
-  });
-  const out = { height: r.H * size, parts: [lit, glowing].map((list) => { if (!list.length) return null; const g = mergeGeometries(list); list.forEach((x) => x.dispose()); g.userData.shared = true; return g; }) };
-  minis.set(key, out);
+    (glows ? glowing : lit).push(g.applyMatrix4(at(o)));
+  }
+  return [lit, glowing].map((list) => { if (!list.length) return null; const g = mergeGeometries(list); list.forEach((x) => x.dispose()); g.userData.shared = true; return g; });
+}
+// A hero built once: merged whole for standing still, and merged per joint for moving.
+function template(hero) {
+  const key = JSON.stringify(hero);
+  if (heroes.has(key)) return heroes.get(key);
+  const { model, refs: r } = buildHero(hero);
+  applyPose(r, "idle", 0); model.updateMatrixWorld(true);
+  const joints = [model, ...r.legs.flatMap((l) => [l.hip, l.knee]), ...r.arms.flatMap((a) => [a.sh, a.el]), r.neck], owned = joints.map(() => []), all = [];
+  model.traverse((o) => { if (!o.isMesh) return; let p = o; while (!joints.includes(p)) p = p.parent; owned[joints.indexOf(p)].push(o); all.push(o); });
+  const fit = new THREE.Matrix4().makeScale(SIZE, SIZE, SIZE);
+  const out = {
+    height: r.H * SIZE, sc: r.sc, fwd: r.fwd, sides: r.arms.map((a) => a.s),
+    still: bake(all, (o) => fit.clone().multiply(o.matrixWorld)),
+    nodes: joints.map((j, i) => { const back = j.matrixWorld.clone().invert(); return { parent: joints.indexOf(j.parent), position: j.position.clone(), parts: bake(owned[i], (o) => back.clone().multiply(o.matrixWorld)) }; }),
+  };
+  all.forEach((o) => o.geometry.dispose());
+  heroes.set(key, out);
   return out;
+}
+// looks: the [lit, glowing] materials. pose(null) shows the cheap still figure; pose(name, seconds) the jointed one.
+export function makeMini(hero, looks) {
+  const m = template(hero), group = new THREE.Group();
+  const dress = (into, parts) => { parts.forEach((g, k) => { if (g) into.add(new THREE.Mesh(g, looks[k])); }); return into; };
+  const still = dress(new THREE.Group(), m.still), nodes = m.nodes.map((n) => dress(new THREE.Group(), n.parts)), rig = nodes[0];
+  m.nodes.forEach((n, i) => { if (!i) return; nodes[i].position.copy(n.position); nodes[n.parent].add(nodes[i]); });
+  rig.scale.setScalar(m.sc * SIZE); rig.visible = false; group.add(still, rig);
+  const [, h0, k0, h1, k1, s0, e0, s1, e1, neck] = nodes, limbs = { neck, fwd: m.fwd, legs: [{ hip: h0, knee: k0, s: -1 }, { hip: h1, knee: k1, s: 1 }], arms: [{ sh: s0, el: e0, s: m.sides[0] }, { sh: s1, el: e1, s: m.sides[1] }] };
+  const pose = (name, t) => {
+    still.visible = !name; rig.visible = !!name; if (!name) return;
+    const body = applyPose(limbs, name, t); rig.position.set(0, body.y * m.sc * SIZE, body.z * m.sc * SIZE); rig.rotation.set(body.tilt, body.spin, body.sway);
+  };
+  return { group, height: m.height, pose };
 }
