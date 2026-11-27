@@ -35,6 +35,7 @@ import { initHandouts } from "./handouts.js";
 import { initRollCall } from "./rollcall.js";
 import { initAtmosphere } from "./atmosphere.js";
 import { openTokenPicker } from "./tokenpics.js";
+import { cleanHero } from "./blockfolk-data.js";
 import { openInventory } from "./inventory.js";
 import { openEquipment } from "./equipment.js";
 import { initMapImage } from "./mapimg.js";
@@ -308,6 +309,7 @@ async function buildTokenMenu(menu, id, done, alive) {
     }
   }
   if (S.isGM) { const pb = document.createElement("button"); pb.textContent = "Picture…"; pb.addEventListener("click", () => { done(); openTokenPicker(id); }); menu.append(pb); }
+  if (S.isGM) { const mb = document.createElement("button"); mb.textContent = "3D mini…"; mb.addEventListener("click", (ev) => { done(); miniMenu(ev, id); }); menu.append(mb); }
   if (S.isGM) {
     const ib = document.createElement("button"), inn = inInitiative(id); ib.textContent = inn ? "Remove from initiative" : "Add to initiative";
     ib.addEventListener("click", () => { done(); inn ? removeFromInitiative(id) : addToInitiative(id); }); menu.append(ib);
@@ -474,6 +476,17 @@ function showActionMenu(e, title, items, fields = [], extra) {
   addFields(menu, fields);
   menu.style.left = e.clientX + "px"; menu.style.top = e.clientY + "px"; document.body.appendChild(menu);
   const r = menu.getBoundingClientRect(); menu.style.left = Math.max(4, Math.min(innerWidth - r.width - 4, e.clientX)) + "px"; menu.style.top = Math.max(4, Math.min(innerHeight - r.height - 4, e.clientY)) + "px";
+}
+// Optional 3D figure for a token (blockfolk.html), from this browser's saved party or a pasted code. The picture stays.
+function miniMenu(e, id) {
+  let party = []; try { party = JSON.parse(localStorage.getItem("blockfolk-party")) || []; } catch { /* none saved */ }
+  const use = (code) => { try { put(`tokens/${id}/mini`, cleanHero(code)); } catch (err) { toast(err.message); } };
+  showActionMenu(e, "3D mini", [
+    ...(Array.isArray(party) ? party : []).map((h) => [`${h?.name || "Unnamed"} (${h?.race} ${h?.cls})`, () => use(h)]),
+    ["Paste hero code…", () => { const text = prompt("Paste a Blockfolk hero code (Copy code in the creator)"); if (!text) return; let code; try { code = JSON.parse(text); } catch { return toast("That is not a hero code."); } use(code); }],
+    ["Open the creator", () => window.open("blockfolk.html", "_blank")],
+    ...(S.tokens[id]?.mini ? [["Remove mini (use picture)", () => put(`tokens/${id}/mini`, null)]] : []),
+  ]);
 }
 // Settings rows: each change is written straight to the database.
 function addFields(menu, fields) {

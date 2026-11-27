@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Blockfolk Character Creator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@500;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.min.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"}}</script>
+<style>
+/* VOICE: calm studio, a sculptor's turntable at game night
+   IDEA: a faceted low-poly figurine photographed on a white sweep
+   PICTURE: the live faceless low-poly hero, soft key light, contact shadow
+   COLOUR and TYPE: white studio stage, parchment panel, dragon-red accent; Pixelify Sans + Inter
+   LAYOUT: stage left (sticky), builder panel right; stacked stage-over-panel on phones */
+:root{color-scheme:light dark;--bg:light-dark(#f3ebe3,#1e1119);--panel:light-dark(#fffaf5,#27161f);--ink:light-dark(#2a1420,#f4e6ea);--muted:light-dark(#7a5a66,#b9a0aa);--line:light-dark(#e3d2c8,#3d2533);--acc:#d6334a}
+:root[data-theme=light]{color-scheme:light}:root[data-theme=dark]{color-scheme:dark}
+*{box-sizing:border-box;min-width:0}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 Inter,system-ui,sans-serif;overflow-x:clip}
+.app{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);min-height:100vh}
+.stage{position:sticky;top:0;height:100vh;background:radial-gradient(circle at 50% 42%,#ffffff,#e2e2e7 78%);overflow:hidden;color:#23161d}
+.stage canvas{position:absolute;inset:0;width:100%;height:100%;touch-action:pan-y;cursor:grab}
+.stage canvas:active{cursor:grabbing}
+.tag{position:absolute;left:20px;bottom:18px;pointer-events:none}
+.tag b{display:block;font:700 clamp(24px,3.4vw,40px)/1.05 'Pixelify Sans',sans-serif;text-wrap:balance}
+.tag span{color:#6b5a62;font-size:15px}
+.poses{position:absolute;top:14px;left:14px;display:flex;gap:6px;flex-wrap:wrap}
+.zoom{position:absolute;right:14px;bottom:14px;display:flex;flex-direction:column;gap:6px}
+.poses button,.zoom button{min-height:40px;min-width:40px;border:1px solid rgba(0,0,0,.12);background:rgba(255,255,255,.8);color:#23161d;border-radius:10px;font:600 14px Inter,sans-serif;padding:0 12px;cursor:pointer;backdrop-filter:blur(4px)}
+.poses button.on,.zoom button.on{background:var(--acc);border-color:var(--acc);color:#fff}
+.panel{padding:24px clamp(16px,3vw,36px) 48px;background:var(--panel);border-left:1px solid var(--line)}
+h1{font:700 clamp(32px,4vw,46px)/1.05 'Pixelify Sans',sans-serif;margin:0 0 6px}
+.lead{margin:0 0 18px;color:var(--muted)}
+h2{font:600 13px Inter,sans-serif;color:var(--muted);margin:18px 0 8px}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+input[type=text]{flex:1 1 180px;min-height:46px;font:16px Inter,sans-serif;padding:0 14px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--ink)}
+.btn{min-height:46px;padding:0 16px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font:600 15px Inter,sans-serif;cursor:pointer}
+.btn.pri{background:var(--acc);color:#fff;border-color:var(--acc);font-family:'Pixelify Sans',sans-serif;font-size:17px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{min-height:40px;padding:0 13px;border-radius:999px;border:1px solid var(--line);background:transparent;color:var(--ink);font:500 14px Inter,sans-serif;cursor:pointer}
+.chip.on{background:var(--ink);color:var(--panel);border-color:var(--ink)}
+.sws{display:flex;flex-wrap:wrap;gap:8px}
+.sw{width:40px;height:40px;border-radius:8px;border:2px solid var(--line);background:var(--c);cursor:pointer;box-shadow:inset -6px -6px 0 rgba(0,0,0,.2),inset 6px 6px 0 rgba(255,255,255,.14)}
+.sw.on{outline:3px solid var(--acc);outline-offset:2px}
+.cols{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.cols label{font-size:13px;color:var(--muted);display:grid;gap:4px}
+input[type=color]{width:100%;height:44px;border:1px solid var(--line);border-radius:10px;background:var(--bg);padding:3px;cursor:pointer}
+button:focus-visible,input:focus-visible,textarea:focus-visible{outline:3px solid var(--acc);outline-offset:2px}
+.sec{border-top:1px solid var(--line);margin-top:20px;padding-top:4px}
+.mem{display:flex;gap:6px;margin-bottom:6px}
+.memb{flex:1;display:flex;align-items:center;gap:10px;min-height:46px;padding:0 12px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font:600 15px Inter,sans-serif;cursor:pointer;text-align:left}
+.memb small{margin-left:auto;color:var(--muted);font-weight:400}
+.dot{width:18px;height:18px;border-radius:4px;flex:none}
+.x{min-width:46px;border-radius:12px;border:1px solid var(--line);background:transparent;color:var(--muted);font-size:20px;cursor:pointer}
+.empty{color:var(--muted);margin:0}
+.modal{position:fixed;inset:0;background:rgba(10,4,8,.6);display:grid;place-items:center;padding:16px;z-index:9}
+.modal[hidden]{display:none}
+.sheet{background:var(--panel);border-radius:16px;padding:20px;width:min(560px,100%);display:grid;gap:10px}
+.sheet h3{margin:0;font:700 24px 'Pixelify Sans',sans-serif}.sheet p{margin:0;color:var(--muted)}
+textarea{width:100%;height:180px;font:13px ui-monospace,monospace;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--ink);padding:10px}
+@media(max-width:900px){.app{grid-template-columns:1fr}.stage{height:48vh;z-index:2}.panel{border-left:0}.tag b{font-size:24px}}
+@media(max-width:420px){.poses button{padding:0 9px}}
+</style>
+</head>
+<body>
+<div class="app">
+  <section class="stage" id="view" aria-label="3D character preview, drag to turn">
+    <div class="poses" id="poses"></div>
+    <div class="zoom"><button id="zin" aria-label="Zoom in">+</button><button id="zout" aria-label="Zoom out">−</button><button id="spin" aria-label="Turntable">⟳</button><button id="rul" class="on" aria-label="Height ruler">ft</button></div>
+    <div class="tag"><b id="nm"></b><span id="sub"></span></div>
+  </section>
+  <aside class="panel">
+    <h1>Blockfolk</h1>
+    <p class="lead">Faceted low-poly D&amp;D heroes. Pick a race and class, then tweak the details. Drag the mini to turn it.</p>
+    <div class="row"><input type="text" id="name" maxlength="40" aria-label="Character name" placeholder="Character name"><button class="btn pri" id="rand">Roll a hero</button></div>
+    <h2>Race</h2><div class="chips" id="c-race"></div>
+    <h2>Class</h2><div class="chips" id="c-cls"></div>
+    <div class="sec">
+      <h2>Skin</h2><div class="sws" id="c-skin"></div>
+      <h2>Eyes</h2><div class="sws" id="c-eye"></div>
+      <h2>Hair</h2><div class="chips" id="c-hair"></div>
+      <h2>Hair colour</h2><div class="sws" id="c-hairc"></div>
+      <h2>Beard</h2><div class="chips" id="c-beard"></div>
+    </div>
+    <div class="sec">
+      <h2>Outfit</h2><div class="chips" id="c-style"></div>
+      <h2>Colours</h2>
+      <div class="cols"><label>Main<input type="color" id="k-top"></label><label>Legs<input type="color" id="k-bot"></label><label>Trim<input type="color" id="k-trim"></label></div>
+      <h2>Headwear</h2><div class="chips" id="c-hat"></div>
+      <h2>Back</h2><div class="chips" id="c-cape"></div>
+      <h2>Main hand</h2><div class="chips" id="c-main"></div>
+      <h2>Off hand</h2><div class="chips" id="c-off"></div>
+    </div>
+    <div class="sec">
+      <h2>Save and export</h2>
+      <div class="row"><button class="btn pri" id="save">Save to party</button><button class="btn" id="cjson">Copy code</button><button class="btn" id="ljson">Load code</button><button class="btn" id="gltf">Export glTF</button></div>
+      <h2>Party</h2><div id="party"></div>
+    </div>
+  </aside>
+</div>
+<div class="modal" id="modal" hidden><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="mt">
+  <h3 id="mt"></h3><p id="md"></p><textarea id="mx" spellcheck="false"></textarea>
+  <div class="row"><button class="btn pri" id="mcopy">Copy</button><button class="btn" id="mload">Load</button><button class="btn" id="mclose">Close</button></div>
+</div></div>
+<script>
+window.addEventListener('error',e=>{const v=document.getElementById('view');if(!v||document.getElementById('err'))return;const d=document.createElement('div');d.id='err';d.style.cssText='position:absolute;inset:auto 14px 70px 14px;background:#fff;border:2px solid #d6334a;border-radius:12px;padding:12px;font:14px Inter,sans-serif;color:#2a1420;z-index:5';d.textContent='Something broke while drawing: '+(e.message||'unknown error')+'. Send this text to Claude.';v.append(d)});
+</script>
+<script type="module">
+import * as THREE from "three";
+import { GLTFExporter } from "three/addons/exporters/GLTFExporter.js";
+import { RACES, CLASSES, HAIRS, BEARDS, HATS, STYLES, CAPES, ITEMS, HAIRC, EYES, SY1, SY2, UPI, cleanHero } from "./js/vtt/blockfolk-data.js";
+import { buildHero, tex } from "./js/vtt/blockfolk.js";
+const $=s=>document.querySelector(s);
+let S={},refs={};
+const applyRace=r=>{const R=RACES[r];S.race=r;S.skin=R.skins[0];S.hair=R.hair;S.beard=R.beard||'none'};
+const applyClass=c=>{S.cls=c;Object.assign(S,CLASSES[c])};
+applyRace('Dwarf');applyClass('Fighter');Object.assign(S,{name:'Brannoc Ironvein',hairC:'#c94a2a',eye:'#3a6ab0'});
+
+const view=$('#view');
+const renderer=new THREE.WebGLRenderer({antialias:true,alpha:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.05;
+view.prepend(renderer.domElement);
+const scene=new THREE.Scene(),cam=new THREE.PerspectiveCamera(28,1,.5,500);
+scene.add(new THREE.HemisphereLight(0xffffff,0xb8b4ae,.55*Math.PI));
+{const pm=new THREE.PMREMGenerator(renderer),es=new THREE.Scene(),sg=new THREE.SphereGeometry(50,32,16),p=sg.attributes.position,c=new Float32Array(p.count*3);
+ for(let i=0;i<p.count;i++){const v=.55+.45*Math.max(0,p.getY(i)/50);c[i*3]=c[i*3+1]=c[i*3+2]=v}
+ sg.setAttribute('color',new THREE.BufferAttribute(c,3));es.add(new THREE.Mesh(sg,new THREE.MeshBasicMaterial({vertexColors:true,side:THREE.BackSide})));
+ const lb=new THREE.Mesh(new THREE.BoxGeometry(30,2,30),new THREE.MeshBasicMaterial({color:0xffffff}));lb.position.set(-15,40,15);es.add(lb);scene.environment=pm.fromScene(es,.04).texture}
+const sun=new THREE.DirectionalLight(0xffffff,1.15*Math.PI);sun.position.set(-22,45,30);sun.castShadow=true;sun.shadow.mapSize.set(2048,2048);sun.shadow.bias=-.0004;sun.shadow.normalBias=.02;
+Object.assign(sun.shadow.camera,{left:-16,right:16,top:28,bottom:-6,near:1,far:120});scene.add(sun);
+const fillL=new THREE.DirectionalLight(0xdfe8ff,.35*Math.PI);fillL.position.set(30,20,20);scene.add(fillL);
+const rimL=new THREE.DirectionalLight(0xffffff,.55*Math.PI);rimL.position.set(5,30,-40);scene.add(rimL);
+const floor=new THREE.Mesh(new THREE.PlaneGeometry(200,200),new THREE.ShadowMaterial({opacity:.16}));floor.rotation.x=-Math.PI/2;floor.receiveShadow=true;scene.add(floor);
+const blobT=tex(64,64,x=>{const g=x.createRadialGradient(32,32,0,32,32,32);g.addColorStop(0,'rgba(0,0,0,.55)');g.addColorStop(1,'rgba(0,0,0,0)');x.fillStyle=g;x.fillRect(0,0,64,64)});
+blobT.magFilter=blobT.minFilter=THREE.LinearFilter;
+const root=new THREE.Group();scene.add(root);let model=null;
+// height ruler in feet, beside the hero (does not spin)
+const ruler=new THREE.Group();scene.add(ruler);ruler.position.set(6.5,0,0);
+{const rm=new THREE.MeshBasicMaterial({color:0x8d8a94}),ft=12*UPI;{const pole=new THREE.Mesh(new THREE.BoxGeometry(.1,ft*8,.1),rm);pole.position.set(0,ft*4,0);ruler.add(pole)}
+ for(let f=1;f<=8;f++){const t=new THREE.Mesh(new THREE.BoxGeometry(f%2?.5:.8,.07,.07),rm);t.position.set(-.2,f*ft,0);ruler.add(t);
+  const lt=new THREE.CanvasTexture((()=>{const c=document.createElement('canvas');c.width=64;c.height=32;const x=c.getContext('2d');x.fillStyle='#6b6772';x.font='600 22px Inter,sans-serif';x.textBaseline='middle';x.fillText(f+' ft',4,17);return c})());
+  const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:lt,transparent:true,depthWrite:false}));sp.scale.set(1.6,.8,1);sp.position.set(.95,f*ft,0);ruler.add(sp)}}
+const blob=new THREE.Mesh(new THREE.PlaneGeometry(6.5,5),new THREE.MeshBasicMaterial({map:blobT,transparent:true,depthWrite:false}));blob.rotation.x=-Math.PI/2;blob.position.y=.02;root.add(blob);
+
+
+function build(){
+ if(model){root.remove(model);model.traverse(o=>{if(o.geometry)o.geometry.dispose()})}
+ ({model,refs}=buildHero(S));root.add(model);blob.scale.set(refs.blob,refs.blob,1)}
+let zoom=1,yaw=-.35,spin=false,pose='idle',boost=0,drag=null;
+function frame(){const w=view.clientWidth,h=view.clientHeight;if(!w||!h)return;renderer.setSize(w,h,false);cam.aspect=w/h;cam.updateProjectionMatrix();
+ const H=Math.max(refs.H||18,17.85*1.04);let d=H*2.35/zoom;if(cam.aspect<.9)d*=.9/cam.aspect;const ty=H*.5;cam.position.set(0,ty+d*.13,d);cam.lookAt(0,ty,0)}
+const ro=new ResizeObserver(frame);ro.observe(view);
+const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches,clock=new THREE.Clock();
+function tick(){const t=reduce?0:clock.getElapsedTime(),[A,B]=refs.arms,[L0,L1]=refs.legs;
+ if(spin&&!reduce)yaw+=.006;if(boost>0){yaw+=boost;boost*=.92;if(boost<.002)boost=0}root.rotation.y=yaw;
+ refs.arms.forEach((a,i)=>{const f=refs.fwd[i];a.sh.rotation.set(f?-.25:0,0,a.s*.1);a.el.rotation.set(f?-.7:-.12,0,0)});
+ refs.legs.forEach(l=>{l.hip.rotation.x=0;l.knee.rotation.x=0});
+ let y=0,cw=0;
+ if(pose==='walk'){const w=Math.sin(t*5);L0.hip.rotation.x=w*.5;L1.hip.rotation.x=-w*.5;L0.knee.rotation.x=Math.max(0,w)*.9;L1.knee.rotation.x=Math.max(0,-w)*.9;
+  A.sh.rotation.x+=-w*.4;B.sh.rotation.x+=w*.4;A.el.rotation.x-=.2;B.el.rotation.x-=.2;y=Math.abs(Math.cos(t*5))*.18;cw=.35}
+ else if(pose==='attack'){const p=(t*1.3)%1,a=p<.6?-2.4*Math.sin(p/.6*Math.PI/2):-2.4+2.9*Math.min(1,(p-.6)/.25);A.sh.rotation.x=-.25+a;A.el.rotation.x=-.5;L0.hip.rotation.x=.25;L1.hip.rotation.x=-.3;L0.knee.rotation.x=.3;cw=.1}
+ else if(pose==='wave'){A.sh.rotation.set(0,0,-2.55);A.el.rotation.set(0,0,-.5+Math.sin(t*7)*.4)}
+ else if(pose==='cheer'){const w=Math.sin(t*5);[A,B].forEach(a=>{a.sh.rotation.set(-2.9,0,a.s*.25);a.el.rotation.set(-.2,0,0)});y=Math.max(0,w)*.6;cw=.15}
+ else{const w=Math.sin(t*1.6);A.sh.rotation.z+=-w*.02;B.sh.rotation.z+=w*.02}
+ model.position.y=y*(refs.sc||1);refs.head.rotation.y=Math.sin(t*.7)*.15;
+ if(refs.cape){refs.cape.rotation.x=.08+cw+Math.sin(t*1.8)*.03;refs.capeSegs.forEach((s,i)=>s.rotation.x=.04+cw*.3+Math.sin(t*2.2+i)*.04)}
+ if(refs.tail)refs.tail.rotation.y=Math.sin(t*2)*.35;
+ refs.orbs.forEach(o=>{o.rotation.set(t,t*2,0);o.position.y=Math.sin(t*3)*.6});
+ if(refs.halo)refs.halo.rotation.z=t*.8;
+ {const b=(t%4.3)<.13?.12:1;refs.eyes.forEach(e=>e.scale.y=b)}
+ renderer.render(scene,cam);requestAnimationFrame(tick)}
+const cv=renderer.domElement;
+cv.addEventListener('pointerdown',e=>{drag={x:e.clientX,y:yaw};cv.setPointerCapture(e.pointerId)});
+cv.addEventListener('pointermove',e=>{if(drag)yaw=drag.y+(e.clientX-drag.x)*.012});
+cv.addEventListener('pointerup',()=>drag=null);cv.addEventListener('pointercancel',()=>drag=null);
+cv.addEventListener('wheel',e=>{e.preventDefault();setZoom(e.deltaY>0?.92:1.08)},{passive:false});
+const setZoom=f=>{zoom=Math.min(2.6,Math.max(.6,zoom*f));frame()};
+$('#zin').onclick=()=>setZoom(1.15);$('#zout').onclick=()=>setZoom(.87);
+$('#spin').onclick=e=>{spin=!spin;e.currentTarget.classList.toggle('on',spin)};
+$('#rul').onclick=e=>{ruler.visible=!ruler.visible;e.currentTarget.classList.toggle('on',ruler.visible)};
+const cap1=v=>v[0].toUpperCase()+v.slice(1);
+const POSES=['idle','walk','attack','wave','cheer'];
+const renderPoses=()=>{$('#poses').innerHTML=POSES.map(p=>`<button data-v="${p}" class="${p===pose?'on':''}">${cap1(p)}</button>`).join('')};
+$('#poses').addEventListener('click',e=>{const b=e.target.closest('button');if(b){pose=b.dataset.v;renderPoses()}});
+
+const UI=[['c-race','race',()=>Object.keys(RACES),'chip'],['c-cls','cls',()=>Object.keys(CLASSES),'chip'],['c-skin','skin',()=>RACES[S.race].skins,'sw'],['c-eye','eye',()=>EYES,'sw'],
+ ['c-hair','hair',()=>HAIRS,'chip'],['c-hairc','hairC',()=>HAIRC,'sw'],['c-beard','beard',()=>BEARDS,'chip'],['c-style','style',()=>STYLES,'chip'],['c-hat','hat',()=>HATS,'chip'],['c-cape','cape',()=>CAPES,'chip'],['c-main','main',()=>ITEMS,'chip'],['c-off','off',()=>ITEMS,'chip']];
+function renderUI(){
+ UI.forEach(([id,key,list,kind])=>{$('#'+id).innerHTML=list().map(v=>kind==='sw'?`<button class="sw${v===S[key]?' on':''}" data-v="${v}" style="--c:${v}" aria-label="${key} ${v}"></button>`:`<button class="chip${v===S[key]?' on':''}" data-v="${v}">${cap1(v)}</button>`).join('')});
+ ['top','bot','trim'].forEach(k=>$('#k-'+k).value=S[k]);
+ $('#name').value=S.name;$('#nm').textContent=S.name||'Unnamed hero';{const i=Math.round((refs.body||17.85)/UPI);$('#sub').textContent=`${S.race} ${S.cls} · ${Math.floor(i/12)}′${i%12}″`}
+}
+function update(){build();renderUI();frame()}
+UI.forEach(([id,key])=>$('#'+id).addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;const v=b.dataset.v;
+ if(key==='race')applyRace(v);else if(key==='cls')applyClass(v);else S[key]=v;update()}));
+let pend=0;['top','bot','trim'].forEach(k=>$('#k-'+k).addEventListener('input',e=>{S[k]=e.target.value;if(!pend)pend=requestAnimationFrame(()=>{pend=0;build()})}));
+$('#name').addEventListener('input',e=>{S.name=e.target.value;$('#nm').textContent=S.name||'Unnamed hero'});
+const pick=a=>a[Math.random()*a.length|0];
+$('#rand').onclick=()=>{applyRace(pick(Object.keys(RACES)));applyClass(pick(Object.keys(CLASSES)));const R=RACES[S.race];
+ S.skin=pick(R.skins);S.hair=Math.random()<.6?R.hair:pick(HAIRS);S.hairC=pick(HAIRC);S.eye=pick(EYES);
+ S.beard=R.beard||(Math.random()<.25?pick(BEARDS):'none');if(Math.random()<.3)S.hat=pick(HATS);if(Math.random()<.25)S.cape=pick(CAPES);S.name=pick(SY1)+pick(SY2);boost=.35;update()};
+
+let party=[];try{party=JSON.parse(localStorage.getItem('blockfolk-party')||'[]');if(!Array.isArray(party))party=[]}catch(e){party=[]}
+const saveParty=()=>{try{localStorage.setItem('blockfolk-party',JSON.stringify(party))}catch(e){}};
+const HEX=/^#[0-9a-f]{6}$/i;
+function renderParty(){const el=$('#party');el.textContent='';
+ if(!party.length){el.innerHTML='<p class="empty">Saved heroes appear here, in this browser.</p>';return}
+ party.forEach((c,i)=>{const row=document.createElement('div');row.className='mem';const b=document.createElement('button');b.className='memb';
+  const dot=document.createElement('span');dot.className='dot';dot.style.background=HEX.test(c.top)?c.top:'#888';
+  const t=document.createElement('span');t.textContent=c.name||'Unnamed';const s=document.createElement('small');s.textContent=`${c.race} ${c.cls}`;
+  b.append(dot,t,s);b.onclick=()=>{try{S=cleanHero(c);update()}catch(e){}};
+  const x=document.createElement('button');x.className='x';x.textContent='×';x.setAttribute('aria-label','Remove '+(c.name||'hero'));
+  x.onclick=()=>{party.splice(i,1);saveParty();renderParty()};row.append(b,x);el.append(row)})}
+$('#save').onclick=()=>{const i=party.findIndex(c=>c.name&&c.name===S.name);if(i>=0)party[i]={...S};else party.push({...S});saveParty();renderParty()};
+
+const modal=$('#modal'),mx=$('#mx');
+function openM(title,desc,text,load){$('#mt').textContent=title;$('#md').textContent=desc;mx.value=text;$('#mload').hidden=!load;$('#mcopy').hidden=load;$('#mcopy').textContent='Copy';modal.hidden=false;(load?mx:$('#mclose')).focus()}
+$('#mclose').onclick=()=>modal.hidden=true;modal.addEventListener('click',e=>{if(e.target===modal)modal.hidden=true});
+document.addEventListener('keydown',e=>{if(e.key==='Escape')modal.hidden=true});
+$('#mcopy').onclick=e=>{const b=e.currentTarget;navigator.clipboard.writeText(mx.value).then(()=>b.textContent='Copied').catch(()=>{mx.select();b.textContent='Selected, copy manually'})};
+$('#mload').onclick=()=>{try{S=cleanHero(JSON.parse(mx.value));update();modal.hidden=true}catch(e){$('#md').textContent=e.message||'That is not valid character code.'}};
+$('#cjson').onclick=()=>openM('Character code','Keep this to rebuild the hero later with Load code.',JSON.stringify(S),false);
+$('#ljson').onclick=()=>openM('Load a character','Paste character code below.','',true);
+$('#gltf').onclick=()=>{ const fn=(S.name||'hero').replace(/[^\w-]+/g,'_');
+ const outs=[];model.traverse(o=>{if(o.userData.out){o.visible=false;outs.push(o)}});const show=()=>outs.forEach(o=>o.visible=true);
+ try{new GLTFExporter().parse(model,g=>{show();const s=JSON.stringify(g);openM('glTF model',`${Math.round(s.length/1024)} KB. Copy it into a new file named ${fn}.gltf, then open it in three.js or Blender.`,s,false)},e=>{show();openM('Export failed',String(e.message||e),'',false)},{binary:false})}
+ catch(e){show();openM('Export failed',String(e.message||e),'',false)}};
+
+update();renderPoses();renderParty();tick();
+</script>
+</body>
+</html>

@@ -4,6 +4,11 @@ What changed in Geez3DVTT, newest first.
 
 ## 2026-11-27
 
+### Token minis (optional)
+- **Blockfolk heroes can stand on tokens:** right-click a token, **3D mini…**, and pick a saved hero or paste its code.
+  Pictures stay the default, top-down still shows them, and **Remove mini** switches back.
+- **The Blockfolk character creator** is included as `blockfolk.html`.
+
 ### Doors
 - **A drag makes one door** as long as the drag, instead of a row of one-square doors. Windows work the same way.
 - **Iron doors draw as iron**, including ones already placed with the iron material.

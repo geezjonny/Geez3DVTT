@@ -13,6 +13,8 @@ import { isCurrentlyVisible } from "./explored-vtt.js";
 import { getRefImage } from "./refimage.js";
 import { doorSeg } from "./reach.js";
 import { doorKind } from "./door-segment.js";
+import { miniParts } from "./blockfolk.js";
+import { cleanHero } from "./blockfolk-data.js";
 import { CONDITIONS, conditionsOf } from "./conditions.js";
 import { propParts } from "./propmodels.js";
 import { SOURCES, statesOf, startOf } from "../puzzle/objects.js";
@@ -851,6 +853,13 @@ function buildToken(id, t, i) {
   const flat = (map, w, h) => { const s = new THREE.Sprite(new THREE.SpriteMaterial({ map, transparent: true, opacity: faint ? 0.45 : 1, depthTest: !!fp || !here(t), depthWrite: false, fog: false })); s.scale.set(w, h, 1); s.renderOrder = 11; g.add(s); return s; };
   entry.picture = flat(art, 0.82, 0.82);
   g.add(base, entry.disc);
+  if (t.mini) try { // an optional Blockfolk figure stands on the base instead of the floating picture
+    const { parts, height } = miniParts(cleanHero(t.mini));
+    entry.mini = new THREE.Group(); entry.mini.position.y = 0.09; entry.miniHeight = height;
+    const looks = [new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true, side: THREE.DoubleSide, ...ghost }), new THREE.MeshBasicMaterial({ vertexColors: true, ...ghost })];
+    parts.forEach((geo, k) => { if (geo) entry.mini.add(new THREE.Mesh(geo, looks[k])); else looks[k].dispose(); });
+    g.add(entry.mini);
+  } catch (err) { console.warn("token mini", id, err.message); } // a bad code keeps the picture
   const tag = (s, lift) => { s.userData.lift = lift; s.raycast = () => {}; entry.tags.push(s); };
   const hp = hpOf(id, t);
   if (hp) {
@@ -867,9 +876,9 @@ function buildToken(id, t, i) {
 }
 // Tilted: the picture floats where the character stands, above the base. Top-down: the picture is on the base.
 function placeToken(e) {
-  e.picture.visible = !topDown; e.disc.visible = topDown;
+  e.picture.visible = !topDown && !e.mini; e.disc.visible = topDown; if (e.mini) e.mini.visible = !topDown;
   e.picture.center.set(0.5, 0); e.picture.position.y = 0.28;
-  const top = topDown ? 0.4 : e.picture.scale.y; // name and HP sit above whichever is showing
+  const top = topDown ? 0.4 : e.mini ? e.miniHeight - 0.19 : e.picture.scale.y; // name and HP sit above whichever is showing
   for (const s of e.tags) { s.position.y = topDown ? 0.12 : 0.28; s.center.set(0.5, -(top + s.userData.lift) / s.scale.y); }
 }
 let walkingId = null;
@@ -882,12 +891,14 @@ function syncTokens() {
     if (!here(t) && !S.isGM) return; // other floors: only the GM sees who is there
     if (!S.isGM && !own && (!seenByRules(t) || (S.map.exploredEnabled !== false && !isCurrentlyVisible(t.x, t.y)))) return;
     seen.add(id);
-    const sig = JSON.stringify([t.img, t.label, t.guard, t.color, t.hidden, t.size, here(t), conditionsOf(t), S.turn === id, hpOf(id, t), t.pc, !!fp]);
+    const sig = JSON.stringify([t.img, t.label, t.guard, t.color, t.hidden, t.size, here(t), conditionsOf(t), S.turn === id, hpOf(id, t), t.pc, !!fp, t.mini]);
     let e = tokens.get(id);
     if (!e || e.sig !== sig) { const old = e?.group.position.clone(); if (e) { tokenRoot.remove(e.group); disposeTree(e.group); } e = buildToken(id, t, i); e.sig = sig; if (old) e.group.position.copy(old); dirty = true; }
     const base = (lvOf(t) - nowLv()) * floorGap();
     if (e.base !== base) { e.base = base; e.group.position.set(t.x / U, base, t.y / U); dirty = true; }
     e.group.position.y = base;
+    const turn = t.face == null ? 0 : Math.PI / 2 - t.face * Math.PI / 180; // figures face the viewer; guards face where they look
+    if (e.mini && e.mini.rotation.y !== turn) { e.mini.rotation.y = turn; dirty = true; }
   });
   for (const [id, e] of tokens) if (!seen.has(id)) { tokenRoot.remove(e.group); disposeTree(e.group); tokens.delete(id); dirty = true; }
   for (const { a, m } of roofs) { const inside = Object.values(S.tokens).some((t) => isPcToken(t) && !t.hidden && here(t) && t.x >= a.x && t.x <= a.x + a.w && t.y >= a.y && t.y <= a.y + a.h); const show = !!fp || !inside; if (m.visible !== show) { m.visible = show; dirty = true; renderer.shadowMap.needsUpdate = true; } }
