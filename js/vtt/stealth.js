@@ -122,7 +122,12 @@ export function initStealth({ myToken, toast }) {
     const nowMs = performance.now(), dt = Math.min(1, (nowMs - then) / 1000); then = nowMs;
     const all = Object.entries(S.tokens).filter(([, t]) => Number.isFinite(t.x));
     const guards = on ? all.filter(([, t]) => t.guard && !t.pc) : [];
-    const targets = all.filter(([, t]) => !t.guard && !t.hidden && isPcToken(t));
+    const targets = all.filter(([, t]) => !t.guard && !t.hidden && !t.neutral && isPcToken(t));
+    for (const key of held) {   // marked neutral after being seen: drop the case and let both walk
+      const [gid, tid] = key.split(" "); if (!S.tokens[tid]?.neutral) continue;
+      held.delete(key); cases.delete(tid); drawCases();
+      const free = release([tid, ...([...cases.values()].some((c) => c.gid === gid) ? [] : [gid])]); if (Object.keys(free).length) patch(free);
+    }
     const cache = new Map(), walls = (lv) => { if (!cache.has(lv)) cache.set(lv, sightWalls(lv)); return cache.get(lv); };
     const routes = new Map(), ground = (lv) => { if (!routes.has(lv)) routes.set(lv, walking(lv)); return routes.get(lv); };
     const near = (g) => walls(g.lv ?? 0).filter(([a, b, c, d]) => Math.max(a, c) >= g.x - SIGHT && Math.min(a, c) <= g.x + SIGHT && Math.max(b, d) >= g.y - SIGHT && Math.min(b, d) <= g.y + SIGHT);
@@ -171,7 +176,7 @@ export function initStealth({ myToken, toast }) {
     panel.hidden = !on || !t;
     if (t && on) {
       const caught = !!t.spotted || seeing.has(mine);
-      status.textContent = caught ? "👁 Seen!" : "Hidden"; panel.classList.toggle("seen", caught);
+      status.textContent = caught ? "👁 Seen!" : t.neutral ? "Neutral to guards" : "Hidden"; panel.classList.toggle("seen", caught);
       sneakBtn.textContent = `${t.sneak ? `Sneaking ${t.stealth ?? ""}` : "Sneak"} (C)`; sneakBtn.setAttribute("aria-pressed", !!t.sneak);
       const left = Math.ceil((listen.ready - Date.now()) / 1000);
       listenBtn.textContent = Date.now() < listen.until ? `Listening ${listen.score}` : left > 0 ? `Listen in ${left}s` : "Listen (Q)"; listenBtn.disabled = left > 0;

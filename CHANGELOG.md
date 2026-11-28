@@ -25,6 +25,7 @@ What changed in Geez3DVTT, newest first.
 - Right-click an NPC token and **Tag as guard**. Guards patrol points you set, sweep, open unlocked doors, see in a
   cone that walls block (shorter in the dark), and walk over to footsteps they hear.
 - A seen character and the guard both stop; you rule **Not seen**, **Investigate** or **Keep stopped**.
+- Right-click a character and pick **Neutral to guards**: no guard sees or hears them until you switch it back.
 - Players **sneak** (C: slower, quieter, rolls Stealth) and **listen** (Q: rolls Perception, rings show guards heard).
 
 ### Loot, traps and effects

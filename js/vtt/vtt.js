@@ -304,6 +304,10 @@ async function buildTokenMenu(menu, id, done, alive) {
     const lb = document.createElement("button"); lb.textContent = t.torch ? "Light: put out torch" : "Light: hold torch";
     lb.addEventListener("click", () => { done(); put(`tokens/${id}/torch`, t.torch ? null : true); }); menu.append(lb);
   }
+  if (S.isGM && isPcToken(t)) {   // guards neither see nor hear a neutral character
+    const nb = document.createElement("button"); nb.textContent = t.neutral ? "Guards: stop ignoring" : "Neutral to guards";
+    nb.addEventListener("click", () => { done(); patch({ [`tokens/${id}/neutral`]: t.neutral ? null : true, ...(!t.neutral && t.spotted ? { [`tokens/${id}/spotted`]: null, [`tokens/${id}/frozen`]: null } : {}) }); }); menu.append(nb);
+  }
   if (S.isGM && !t.pc) {   // the guard tag: used while stealth mode is on
     const act = (text, changes) => { const b = document.createElement("button"); b.textContent = text; b.addEventListener("click", () => { done(); patch(Object.fromEntries(Object.entries(changes).map(([k, v]) => [`tokens/${id}/${k}`, v]))); }); menu.append(b); };
     act(t.guard ? "Remove guard tag" : "Tag as guard", t.guard ? { guard: null, mood: null, ...(t.spotted ? { spotted: null, frozen: null } : {}) } : { guard: true });

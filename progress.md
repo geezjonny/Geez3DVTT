@@ -16,6 +16,8 @@
   and presets (Squishy included). Saved monsters appear in **3D mini…** like heroes.
 - **Token menu:** type or step HP, and set token size.
 - Castle scene saved in `scene/` as "Battle at Castle Alaris": more props, and minis on 7 tokens.
+- **Stealth:** GM can right-click a character and pick **Neutral to guards**; no guard sees or hears them until switched
+  back. Tests pass (83); not yet tried in a live browser.
 
 ### Where it stands
 - Everything is on `main`, the only branch, and live on the GitHub Pages site. Every push updates the live table.
