@@ -13,7 +13,18 @@ export const RACES={
  Tabaxi:{skins:['#d9a05a','#e8d6b8','#6b5a4a','#3a3434','#c97a3a'],h:1.02,w:.9,ears:'cat',tail:'cat',cat:1,hair:'bald'},
  Goliath:{skins:['#a7a8a2','#8f948f','#b6a99a','#7a7f86','#c9c2b6'],h:1.25,w:1.3,head:.95,marks:1,hair:'bald'},
  Aasimar:{skins:['#f6e2cf','#e0bfa0','#c9926a','#9a6a4a','#d9d6e8'],halo:1,glow:1,hair:'long'},
- Goblin:{skins:['#7aa64a','#9ab84a','#c2a04a','#6b8a3a','#a0b07a'],h:.55,w:.9,head:1.2,ears:'goblin',hair:'bald'}
+ Goblin:{skins:['#7aa64a','#9ab84a','#c2a04a','#6b8a3a','#a0b07a'],h:.55,w:.9,head:1.2,ears:'goblin',hair:'bald'},
+ // face / legs / cape: what a new hero of that race starts with
+ Fairy:{skins:['#f6dcc4','#d9f0c8','#c8d8f6','#f2c8e0','#b97a52'],h:.9,w:.82,head:1.2,ears:'elf',hair:'long',face:'heroic',cape:'fairywings'},
+ Dhampir:{skins:['#e8e0e4','#d6c8cc','#bfb0b8','#a89aa8','#8a7580'],ears:'elf',hair:'long',face:'heroic'},
+ Werewolf:{skins:['#6b5a4a','#8a8a90','#3a3434','#a8784a','#d9d4cc'],h:1.1,w:1.2,ears:'cat',tail:'wolf',snout:1,glow:1,hair:'bald',face:'heroic',legs:'paws'},
+ Centaur:{skins:HUM,w:1.05,ears:'elf',tail:'horse',hair:'long',face:'heroic',legs:'centaur'},
+ Satyr:{skins:HUM,h:.95,ears:'goblin',horns:'ram',beard:'short',hair:'short',face:'heroic',legs:'goat'},
+ Minotaur:{skins:['#8a6a4a','#6b4a2e','#a8845a','#4a3a34','#c9ab8a'],h:1.15,w:1.35,head:1.05,ears:'goblin',horns:'bull',tail:'bull',snout:1,hair:'bald',face:'heroic',legs:'hooves'},
+ Firbolg:{skins:['#9ab0c8','#a8b8a0','#c8a89a','#8aa0b0','#d9bfa8'],h:1.2,w:1.2,ears:'elf',hair:'long',face:'heroic'},
+ Lizardfolk:{skins:['#4a7a3a','#6b8a4a','#2e6b5a','#8a8a4a','#5a5a3a'],h:1.08,w:1.12,ears:'none',tail:'drag',snout:1,scales:1,hair:'bald',face:'heroic',legs:'talons'},
+ Aarakocra:{skins:['#4a6ab0','#b0483a','#d9c8a8','#6b5a4a','#2e7d6f'],h:.98,w:.9,ears:'none',snout:1,hair:'bald',face:'heroic',legs:'talons',cape:'featherwings'},
+ Harengon:{skins:['#d9c4a8','#a8886a','#f0ece4','#6b5a50','#c9905a'],h:.92,w:.95,ears:'rabbit',tail:'bunny',hair:'bald',face:'heroic',legs:'paws'}
 };
 export const CLASSES={
  Fighter:{top:'#8a2f2f',bot:'#4a3a2a',trim:'#c4cad3',style:'plate',main:'sword',off:'shield',hat:'none',cape:'cape'},
@@ -30,17 +41,17 @@ export const CLASSES={
  Warlock:{top:'#2a1a33',bot:'#1a1020',trim:'#7cf2c0',style:'cloth',main:'rod',off:'book',hat:'hood',cape:'cape'}
 };
 export const HAIRS=['bald','short','long','mohawk','bun','braids'],BEARDS=['none','stubble','short','long'];
-export const HATS=['none','hood','wizard','helm','horned','crown','circlet','cap','feather','tophat','bandana'],STYLES=['cloth','leather','studded','hide','chain','scale','plate','robe','coat','bare'],CAPES=['none','cape','long','quiver','backpack','featherwings','batwings'];
+export const HATS=['none','hood','wizard','helm','horned','crown','circlet','cap','feather','tophat','bandana'],STYLES=['cloth','leather','studded','hide','chain','scale','plate','robe','coat','bare'],CAPES=['none','cape','long','quiver','backpack','featherwings','batwings','fairywings'];
 export const ITEMS=['none','sword','greatsword','rapier','dagger','axe','mace','hammer','flail','club','spear','trident','scythe','staff','rod','wand','bow','crossbow','shield','towershield','buckler','book','orb','lute','torch','lantern','potion','tankard','skull','banner'];
 // body parts and extras: the first choice is the default ('race' and 'auto' follow the race or outfit)
-export const PARTS={sex:['male','female'],head:['normal','round','square','long','skull','beast','bird','heroic'],torso:['normal','slim','broad','belly'],arms:['normal','muscular','bone','claws','metal'],legs:['normal','bone','metal','hooves','peg'],
- ears:['race','none','round','elf','goblin','cat'],horns:['race','none','tief','drag','antlers'],tail:['race','none','drag','cat','tief'],face:['none','glasses','eyepatch','mask'],neck:['none','scarf','amulet'],shoulders:['auto','none','pauldrons','spikes','fur']};
+export const PARTS={sex:['male','female'],head:['normal','round','square','long','skull','beast','bird','heroic'],torso:['normal','slim','broad','belly','heroic'],arms:['normal','muscular','bone','claws','metal'],legs:['normal','bone','metal','hooves','peg','goat','paws','talons','centaur'],
+ ears:['race','none','round','elf','goblin','cat','rabbit'],horns:['race','none','tief','drag','antlers','ram','bull'],tail:['race','none','drag','cat','tief','wolf','horse','bull','bunny'],face:['none','glasses','eyepatch','mask'],neck:['none','scarf','amulet'],shoulders:['auto','none','pauldrons','spikes','fur']};
 export const SLIDERS={height:[.7,1.4],build:[.75,1.4],headSize:[.7,1.45],armLen:[.75,1.35],legLen:[.7,1.35],thick:[.6,1.6]}; // all 1 to start
 export const HAIRC=['#2a1d14','#5a3a22','#8a5a2a','#c98a3a','#e8d08a','#c94a2a','#e8e6e0','#4a5aa6','#7a3a8a','#1c1c1c'];
 export const EYES=['#3a6ab0','#4a8a3a','#6b4a2a','#c9a03a','#d94a4a','#a64ac9','#e8e8e8','#1c1c1c'];
 export const SY1=['Bal','Thor','Ely','Mor','Kae','Vex','Lun','Dra','Bri','Gim','Zan','Ori','Fen','Syl','Ruk','Ash','Tam','Quill'];
 export const SY2=['dric','wyn','ra','gar','iel','ix','ora','ek','mir','ana','os','ith','bek','elle'];
-export const SCALE={Human:[1,1],Elf:[.95,1.06],Dwarf:[.85,.78],Halfling:[.545,.9],Gnome:[.61,.85],'Half-Orc':[1.06,1],Tiefling:[1,1],Dragonborn:[1.1,1],Tabaxi:[1.05,1.04],Goliath:[1.3,1],Aasimar:[1.02,1],Goblin:[.63,.85]};
+export const SCALE={Human:[1,1],Elf:[.95,1.06],Dwarf:[.85,.78],Halfling:[.545,.9],Gnome:[.61,.85],'Half-Orc':[1.06,1],Tiefling:[1,1],Dragonborn:[1.1,1],Tabaxi:[1.05,1.04],Goliath:[1.3,1],Aasimar:[1.02,1],Goblin:[.63,.85],Fairy:[.5,1],Dhampir:[1,1.02],Werewolf:[1.1,1],Centaur:[1.08,1],Satyr:[.96,.98],Minotaur:[1.2,.96],Firbolg:[1.24,1.06],Lizardfolk:[1.08,1],Aarakocra:[.96,1.02],Harengon:[.86,1.04]};
 export const UPI=17.85/68; // model units per inch (base human = 5'8")
 
 const HEX=/^#[0-9a-f]{6}$/i;
@@ -49,8 +60,8 @@ export function cleanHero(c){
  if(c&&c.creature)return cleanCreature(c); // a monster (blockcreature.html)
  if(!c||!Object.hasOwn(RACES,c.race)||!Object.hasOwn(CLASSES,c.cls))throw new Error('That code is missing a valid race or class.');
  const R=RACES[c.race],K=CLASSES[c.cls],n={race:c.race,cls:c.cls,name:String(c.name||'').slice(0,40)};
- for(const [k,list,d] of [['hair',HAIRS,R.hair],['beard',BEARDS,R.beard||'none'],['hat',HATS,K.hat],['main',ITEMS,K.main],['off',ITEMS,K.off],['style',STYLES,K.style],['cape',CAPES,K.cape]])n[k]=list.includes(c[k])?c[k]:d;
+ for(const [k,list,d] of [['hair',HAIRS,R.hair],['beard',BEARDS,R.beard||'none'],['hat',HATS,K.hat],['main',ITEMS,K.main],['off',ITEMS,K.off],['style',STYLES,K.style],['cape',CAPES,R.cape||K.cape]])n[k]=list.includes(c[k])?c[k]:d;
  for(const [k,d] of [['skin',R.skins[0]],['hairC',HAIRC[0]],['eye',EYES[0]],['top',K.top],['bot',K.bot],['trim',K.trim]])n[k]=HEX.test(c[k])?c[k]:d;
- for(const [k,list] of Object.entries(PARTS))n[k]=list.includes(c[k])?c[k]:list[0];
+ for(const [k,list] of Object.entries(PARTS))n[k]=list.includes(c[k])?c[k]:(k==='legs'&&R.legs)||(k==='head'&&R.face)||list[0];
  for(const [k,[lo,hi]] of Object.entries(SLIDERS)){const v=Number(c[k]??1);n[k]=Number.isFinite(v)?Math.min(hi,Math.max(lo,v)):1}
  return n}

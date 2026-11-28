@@ -29,6 +29,16 @@ test("the female body and heroic head are kept, and every race has both heroic h
   }
 });
 
+test("the heroic torso is kept", () => {
+  assert.equal(cleanHero({ race: "Goliath", cls: "Monk", torso: "heroic" }).torso, "heroic");
+});
+
+test("an extended race starts with its own legs, head and wings, and a chosen value still wins", () => {
+  const c = cleanHero({ race: "Centaur", cls: "Fighter" }), f = cleanHero({ race: "Fairy", cls: "Wizard" });
+  assert.deepEqual([c.legs, c.head, c.tail, f.cape], ["centaur", "heroic", "race", "fairywings"]);
+  assert.equal(cleanHero({ race: "Centaur", cls: "Fighter", legs: "normal" }).legs, "normal");
+});
+
 test("a monster code is checked as a monster, and the first Squishy mini still loads", () => {
   const squishy = cleanHero({ creature: "octopus" });
   assert.deepEqual([squishy.creature, squishy.body, squishy.eyes, squishy.count], ["monster", "squid", 6, 8]);

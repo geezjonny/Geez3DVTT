@@ -56,6 +56,21 @@ function racePart(p,name,colors,fit=v=>v){const {v,f}=RACE_PARTS[name];
   for(let i=0;i<ids.length;i+=3){const t=ids.slice(i,i+3);if(s<0)t.reverse();for(const k of t){const [x,y,z]=fit([v[k*3]/100,v[k*3+1]/100,v[k*3+2]/100]);pos.push(s*x,y,z)}}
   const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));add(p,g,colors[slot])}}
 
+// Heroic torsos, per race: hips, waist, chest, shoulders, depth, arm thickness, neck, leg thickness, as multiples of the
+// plain figure. Only ring sizes change, so every outfit and armour piece follows the body.
+const TORSOS={Human:[.98,.86,1.36,1.34,1.16,1.38,1.3,1.22],Elf:[.88,.74,1.08,1.14,.94,1.06,1,1.02],Dwarf:[1.08,1.16,1.38,1.28,1.3,1.5,1.55,1.4],Halfling:[1.06,1.04,1.14,1.1,1.1,1.15,1.1,1.16],Gnome:[1.08,1.16,1.12,1.04,1.16,1.14,1.1,1.14],
+ 'Half-Orc':[.96,.9,1.5,1.46,1.3,1.65,1.65,1.4],Tiefling:[.92,.8,1.22,1.24,1.06,1.2,1.15,1.12],Dragonborn:[1.02,.96,1.5,1.4,1.34,1.55,1.6,1.4],Tabaxi:[.88,.72,1.18,1.18,1,1.12,1.1,1.1],Goliath:[1,.94,1.52,1.48,1.34,1.7,1.7,1.45],
+ Aasimar:[.94,.82,1.3,1.3,1.1,1.28,1.2,1.16],Goblin:[.88,.76,.98,1,.98,.94,.9,.94],Fairy:[.86,.72,.92,.96,.9,.82,.85,.88],Dhampir:[.9,.78,1.18,1.22,1,1.15,1.1,1.08],
+ Werewolf:[.92,.82,1.46,1.42,1.3,1.55,1.6,1.3],Centaur:[1.1,.9,1.34,1.3,1.16,1.35,1.35,1.2],Satyr:[.96,.82,1.2,1.2,1.06,1.18,1.15,1.15],Minotaur:[1,.96,1.56,1.5,1.36,1.7,1.85,1.5],Firbolg:[1.04,1.06,1.38,1.34,1.24,1.45,1.5,1.38],
+ Lizardfolk:[.96,.86,1.28,1.24,1.14,1.28,1.4,1.2],Aarakocra:[.84,.72,1.16,1.12,1.16,.94,.95,.9],Harengon:[1,.82,1,1,1,.95,.95,1.18]};
+const FEMALE=[1.16,.84,.82,.78,.95,.68,.68,.88];
+const along=(knots,y)=>{let i=0;while(i<knots.length-2&&y>knots[i+1][0])i++;const [[a,u],[b,v]]=[knots[i],knots[i+1]];return u+(v-u)*Math.max(0,Math.min(1,(y-a)/(b-a)))};
+export function heroTorso(race,fem){const [hip,waist,chest,shoulder,depth,arm,neck,leg]=TORSOS[race].map((v,i)=>fem?v*FEMALE[i]:v); // y: 0 hips .. 5.25 neck
+ return{hip,shoulder,arm,neck,leg,
+  x:y=>along([[.3,Math.max(hip,leg*1.06)],[1.2,waist],[2,waist],[3.8,chest],[4.6,shoulder],[5.25,neck]],y),
+  z:y=>along([[.3,Math.max((hip+1)/2,leg*1.02)],[1.2,waist*depth],[2.2,waist*depth],[3.8,depth*1.06],[4.6,depth],[5.25,neck]],y),
+  push:y=>(fem?.2:.07)*Math.max(0,1-Math.abs(y-3.6)/1.2)}} // chest forward
+
 function item(name){const g=new THREE.Group(),B='#e8edf3';
  const diamond=(w,y,c)=>{const d=box(g,w,w,.6,MM(c),0,y);d.rotation.z=Math.PI/4;return d};
  switch(name){
@@ -96,17 +111,32 @@ export function buildHero(hero){
  const pick=(chosen,own)=>chosen==='race'?own:chosen,ears=pick(S.ears,R.ears),has=v=>v==='none'?undefined:v,horns=has(pick(S.horns,R.horns)),tail=has(pick(S.tail,R.tail)),shoulders=S.shoulders==='auto'?{plate:'plate',leather:'pad',studded:'pad',hide:'fur',scale:'pad',bare:'tuft'}[st]||'none':S.shoulders;
  const metal=st==='plate',bare=st==='bare',chain=st==='chain',hide=st==='hide',leathery=st==='leather'||st==='studded',covered=['hood','helm','horned','bandana'].includes(S.hat),gold=trim===METAL?GOLD:trim;
  const shirt=bare?flesh:metal?METAL:chain?shade(METAL,-.28):hide?FUR:top,bootC=metal?shade(METAL,-.3):'#3a2a20',beltC=st==='robe'?trim:'#3a2618';
- const fem=S.sex==='female',thighL=4.4*lk,shinL=4.65*lk,hipY=thighL+shinL+.55,shY=hipY+4.6,shX=1.86*w*({broad:1.16,slim:.9}[S.torso]||1)*(fem?.9:1),wa=w*1.24*S.thick*({muscular:1.35,bone:.6}[S.arms]||1)*(fem?.86:1),wl=w*1.16*S.thick*(S.legs==='bone'?.55:1)*(fem?.94:1);
+ const fem=S.sex==='female',B=S.torso==='heroic'&&heroTorso(S.race,fem),thighL=4.4*lk,shinL=4.65*lk,hipY=thighL+shinL+.55,shY=hipY+4.6,shX=1.86*w*(B?B.shoulder:({broad:1.16,slim:.9}[S.torso]||1)*(fem?.9:1)),wa=w*1.24*S.thick*({muscular:1.35,bone:.6}[S.arms]||1)*(B?B.arm:fem?.86:1),wl=w*1.16*S.thick*(S.legs==='bone'?.55:1)*(B?B.leg:fem?.94:1);
  // torso shapes widen or narrow the rings by height
- const shaped=rings=>rings.map(([y,rx,rz,ox=0,oz=0])=>{const [a,b]=y>5?[1,1]:S.torso==='slim'?[.84,.86]:S.torso==='broad'&&y>=2.4?[1.22,1.08]:S.torso==='belly'&&y>=0&&y<3?[1.15,1.5]:[1,1];const [c,d]=!fem||y>5?[1,1]:y<1?[1.06,1.02]:y<3?[.84,.9]:[.92,1.06];return[y,rx*a*c,rz*b*d,ox,oz+(b>1.4?.2:0)]});
- const deep={belly:1.45,broad:1.1,slim:.88}[S.torso]||1; // how far the front sticks out, for things pinned to it
+ const shaped=rings=>rings.map(([y,rx,rz,ox=0,oz=0])=>{if(B)return[y,rx*B.x(y),rz*B.z(y),ox,oz+B.push(y)];const [a,b]=y>5?[1,1]:S.torso==='slim'?[.84,.86]:S.torso==='broad'&&y>=2.4?[1.22,1.08]:S.torso==='belly'&&y>=0&&y<3?[1.15,1.5]:[1,1];const [c,d]=!fem||y>5?[1,1]:y<1?[1.06,1.02]:y<3?[.84,.9]:[.92,1.06];return[y,rx*a*c,rz*b*d,ox,oz+(b>1.4?.2:0)]});
+ const deep=y=>B?B.z(y)+B.push(y)/(.9*dw):{belly:1.45,broad:1.1,slim:.88}[S.torso]||1; // how far the front sticks out, for things pinned to it
  const legC=S.legs==='bone'?BONE:S.legs==='metal'?METAL:bot;
  // torso, coloured in bands: pants / belt / shirt / collar  (slim, reference proportions)
  T(model,shaped([[-.45,.86*w,.68*dw],[.3,1.42*w,.84*dw,0,-.05],[1.0,1.3*w,.8*dw],[1.4,1.24*w,.78*dw],[2.6,1.44*w,.88*dw,0,.08],[3.8,1.7*w,.96*dw,0,.12],[4.6,1.78*w,.88*dw,0,.04],[5.25,.46,.44]]),
   {n:7,cols:[bot,bot,beltC,shirt,shirt,shirt,bare?flesh:metal?METAL:trim]},0,hipY,0);
- box(model,.4,.36,.1,MM(GOLD),0,hipY+1.2,.84*dw*deep);
- refs.legs=[-1,1].map(s=>{const hip=grp(model,s*.76*w,hipY,0);
-  const ld=dw*S.thick*(S.legs==='bone'?.55:1),peg=S.legs==='peg'&&s>0,plain=S.legs==='normal'||S.legs==='peg',lm=S.legs==='metal'?1:0;
+ const horse=S.legs==='centaur';
+ box(model,.4,.36,.1,MM(GOLD),0,hipY+1.2,.84*dw*deep(1.2));
+ // animal legs keep the same hip and knee joints, so every pose still works
+ const animalLeg=(x,z,s,kind)=>{const hip=grp(model,x,hipY,z),bird=kind==='talons',paw=kind==='paws',fur=kind==='goat'||kind==='centaur'||kind==='front'?hc:bird?'#d9a03a':sk,ld=dw*S.thick*(B?B.leg:1),t=bird?.72:1;
+  const bend=kind==='front'?0:1;
+  T(hip,[[.3,.68*wl,.7*ld],[0,.78*wl,.82*ld],[-1.8*lk,.7*wl*t,.78*ld*t,0,.25],[-thighL,.34*wl*t,.36*ld*t,0,.55]],{n:6,cols:[bird?sk:fur]});
+  const knee=grp(hip,0,-thighL,0);
+  T(knee,[[0,.34*wl*t,.36*ld*t,0,.55],[-.55*shinL,.23*wl*t,.25*ld*t,0,-.7*bend],[-.66*shinL,.26*wl*t,.28*ld*t,0,-.75*bend],[-shinL+.1,.2*wl*t,.22*ld*t,0,-.05]],{n:6,cols:[fur]});
+  const ank=grp(knee,0,-shinL,0);
+  if(paw){T(ank,[[-.4,.36*wl,.26,0,-.22],[.45,.5*wl,.32,0,-.22],[1.15,.4*wl,.2,0,-.34]],{n:6,axis:'z',cols:[fur]});[-.26,0,.26].forEach(c=>cone(ank,.09,.5,'#2a2020',c*wl,-.38,1.25,3).rotation.x=Math.PI/2)}
+  else if(bird){[-.55,0,.55].forEach(a=>{const g=grp(ank,0,-.3,0);g.rotation.y=a;cone(g,.16,1.5,fur,0,0,.75,4).rotation.x=Math.PI/2;cone(g,.09,.4,'#3a2a20',0,-.05,1.6,3).rotation.x=Math.PI/2});cone(ank,.13,.9,fur,0,-.3,-.45,4).rotation.x=-Math.PI/2}
+  else cyl(ank,.3*wl,.52*wl,.85,'#2a1e18',0,-.13,.05,6);
+  return{hip,knee,s}};
+ refs.back=null;
+ if(horse){const y=hipY-.35;T(model,[[1.1,.95*w,.95],[.2,1.5*w,1.45],[-2.4,1.38*w,1.3],[-5,1.55*w,1.5],[-6.8,1.1*w,1.15],[-7.3,.5*w,.6]],{n:8,axis:'z',cols:[hc]},0,y,0);
+  refs.back=[-1,1].map(s=>animalLeg(s*.95*w,-5.6,s,'centaur'))}
+ refs.legs=['goat','paws','talons','centaur'].includes(S.legs)?[-1,1].map(s=>animalLeg(s*(horse?.9*w:.76*w*(B?B.hip:1)),horse?-.2:0,s,horse?'front':S.legs)):[-1,1].map(s=>{const hip=grp(model,s*.76*w*(B?B.hip:1),hipY,0);
+  const ld=dw*S.thick*(S.legs==='bone'?.55:1)*(B?B.leg:1),peg=S.legs==='peg'&&s>0,plain=S.legs==='normal'||S.legs==='peg',lm=S.legs==='metal'?1:0;
   T(hip,[[.3,.68*wl,.7*ld],[0,.74*wl,.74*ld],[-1.5*lk,.66*wl,.68*ld,0,.04],[-3.6*lk,.45*wl,.48*ld],[-thighL,.42*wl,.44*ld]],{n:6,metal:lm,cols:[legC]});
   const knee=grp(hip,0,-thighL,0);
   if(!plain&&S.legs!=='hooves')sph(knee,.5*wl+.12,lm?MM(GOLD):BONE);
@@ -117,18 +147,18 @@ export function buildHero(hero){
   if(S.legs==='hooves')cyl(ank,.34*wl,.55*wl,.8,'#2a1e18',0,-.15,.1,6);
   else T(ank,[[-.35,.28*wl,.24,0,-.2],[.25,.32*wl,.27,0,-.24],[1.0,.3*wl,.18,0,-.33],[1.4,.2*wl,.11,0,-.38]],{n:6,axis:'z',metal:lm,cols:[plain?bootC:legC]});
   return{hip,knee,s}});
- if(st==='cloth'||leathery||bare||hide||chain||st==='scale'){const L=bare?-1.1:st==='cloth'?-1.9:hide?-1.6:chain?-1.5:-1.0;T(model,shaped([[1.4,1.28*w,.82*dw],[.4,1.5*w,.95*dw],[L,1.66*w,1.04*dw]]),{n:7,dbl:1,cols:[bare?'#8a6a4a':hide?FUR:chain?shade(METAL,-.28):top],cap0:false,cap1:false},0,hipY,0)}
- if(st==='coat'){T(model,shaped([[4.7,1.84*w,.98*dw],[3.8,1.8*w,1.04*dw,0,.1],[1.4,1.36*w,.88*dw],[0,1.6*w,1.0*dw],[-thighL+.3,1.95*w,1.18*dw]]),{n:9,dbl:1,cols:[top],cap0:false,cap1:false},0,hipY,0);
-  [-1,1].forEach(s=>{box(model,.34,3.6,.16,trim,s*.5,hipY+3.1,1.12*dw*deep).rotation.z=-s*.2;for(let k=0;k<3;k++)sph(model,.15,MM(GOLD),s*.28,hipY+1.9+k*.55,1.07*dw*deep)})}
- if(st==='studded')for(let row=0;row<4;row++)for(let k=-2;k<=2;k++)sph(model,.14,MM(METAL),k*.52*w+(row%2)*.2,hipY+1.9+row*.65,(1.07-Math.abs(k)*.11)*dw*deep);
- if(st==='scale')for(let row=0;row<5;row++)for(let k=-2;k<=2;k++){const sf=cone(model,.36*w,.75,MM(row%2?trim:shade(trim,-.25)),(k+(row%2?.25:-.25))*.55*w,hipY+1.7+row*.6,(1.05-Math.abs(k)*.12)*dw*deep,4);sf.rotation.x=Math.PI;sf.scale.z=.3}
- if(chain){for(let k=0;k<9;k++){const y=1.6+k*.38,r=y<2.6?1.36:y<3.8?1.64:1.8;T(model,shaped([[y,r*w*1.03,.96*dw,0,.07],[y+.13,r*w*1.03,.96*dw,0,.07]]),{n:7,metal:1,cols:[METAL],cap0:false,cap1:false},0,hipY,0)}box(model,1.9*w,.5,.14,top,0,hipY+1.3,1.02*dw*deep)}
- if(hide)for(let k=0;k<14;k++){const a=k/14*Math.PI*2;cone(model,.34,1,k%2?FUR:shade(FUR,-.2),Math.sin(a)*1.55*w,hipY-1.5,Math.cos(a)*1.0*dw*deep,3).rotation.x=Math.PI}
- if(st==='robe')T(model,[[1.4,1.28*w,.82*dw],[0,1.55*w,.98*dw],[-hipY*.5,1.7*w,1.08*dw],[-hipY+.9,1.95*w,1.22*dw],[-hipY+.35,2.0*w,1.26*dw]],{n:8,dbl:1,cols:[top,top,top,trim],cap0:false,cap1:false},0,hipY,0);
+ if(!horse&&(st==='cloth'||leathery||bare||hide||chain||st==='scale')){const L=bare?-1.1:st==='cloth'?-1.9:hide?-1.6:chain?-1.5:-1.0;T(model,shaped([[1.4,1.28*w,.82*dw],[.4,1.5*w,.95*dw],[L,1.66*w,1.04*dw]]),{n:7,dbl:1,cols:[bare?'#8a6a4a':hide?FUR:chain?shade(METAL,-.28):top],cap0:false,cap1:false},0,hipY,0)}
+ if(st==='coat'&&!horse){T(model,shaped([[4.7,1.84*w,.98*dw],[3.8,1.8*w,1.04*dw,0,.1],[1.4,1.36*w,.88*dw],[0,1.6*w,1.0*dw],[-thighL+.3,1.95*w,1.18*dw]]),{n:9,dbl:1,cols:[top],cap0:false,cap1:false},0,hipY,0);
+  [-1,1].forEach(s=>{box(model,.34,3.6,.16,trim,s*.5,hipY+3.1,1.12*dw*deep(3.1)).rotation.z=-s*.2;for(let k=0;k<3;k++)sph(model,.15,MM(GOLD),s*.28,hipY+1.9+k*.55,1.07*dw*deep(1.9+k*.55))})}
+ if(st==='studded')for(let row=0;row<4;row++)for(let k=-2;k<=2;k++)sph(model,.14,MM(METAL),k*.52*w+(row%2)*.2,hipY+1.9+row*.65,(1.07-Math.abs(k)*.11)*dw*deep(1.9+row*.65));
+ if(st==='scale')for(let row=0;row<5;row++)for(let k=-2;k<=2;k++){const sf=cone(model,.36*w,.75,MM(row%2?trim:shade(trim,-.25)),(k+(row%2?.25:-.25))*.55*w,hipY+1.7+row*.6,(1.05-Math.abs(k)*.12)*dw*deep(1.7+row*.6),4);sf.rotation.x=Math.PI;sf.scale.z=.3}
+ if(chain){for(let k=0;k<9;k++){const y=1.6+k*.38,r=y<2.6?1.36:y<3.8?1.64:1.8;T(model,shaped([[y,r*w*1.03,.96*dw,0,.07],[y+.13,r*w*1.03,.96*dw,0,.07]]),{n:7,metal:1,cols:[METAL],cap0:false,cap1:false},0,hipY,0)}box(model,1.9*w,.5,.14,top,0,hipY+1.3,1.02*dw*deep(1.3))}
+ if(hide&&!horse)for(let k=0;k<14;k++){const a=k/14*Math.PI*2;cone(model,.34,1,k%2?FUR:shade(FUR,-.2),Math.sin(a)*1.55*w,hipY-1.5,Math.cos(a)*1.0*dw*deep(-1.5),3).rotation.x=Math.PI}
+ if(st==='robe'&&!horse)T(model,(B?shaped:r=>r)([[1.4,1.28*w,.82*dw],[0,1.55*w,.98*dw],[-hipY*.5,1.7*w,1.08*dw],[-hipY+.9,1.95*w,1.22*dw],[-hipY+.35,2.0*w,1.26*dw]]),{n:8,dbl:1,cols:[top,top,top,trim],cap0:false,cap1:false},0,hipY,0);
  if(metal){T(model,shaped([[1.25,1.32*w,.84*dw],[2.6,1.5*w,.96*dw,0,.08],[3.8,1.78*w,1.05*dw,0,.12],[4.6,1.86*w,.96*dw,0,.04],[5.2,.66,.56]]),{n:7,metal:1,cols:[METAL]},0,hipY,0);
-  box(model,1.36*w,3.2,.1,top,0,hipY-.3,.95*dw*deep);box(model,.3,3.2,.12,gold,0,hipY-.3,.96*dw*deep)}
- if(leathery||bare){const sp=box(model,.32,4.9,.1,bare?top:trim,0,hipY+3.0,1.1*dw*deep);sp.rotation.z=.66}
- if(st==='cloth'||leathery)box(model,.55,.65,.35,LEATHER,.95*w,hipY+1.0,.72*dw*deep).rotation.y=-.4;
+  if(!horse){box(model,1.36*w,3.2,.1,top,0,hipY-.3,.95*dw*deep(-.3));box(model,.3,3.2,.12,gold,0,hipY-.3,.96*dw*deep(-.3))}}
+ if(leathery||bare){const sp=box(model,.32,4.9,.1,bare?top:trim,0,hipY+3.0,1.1*dw*deep(3));sp.rotation.z=.66}
+ if(st==='cloth'||leathery)box(model,.55,.65,.35,LEATHER,.95*w,hipY+1.0,.72*dw*deep(1)).rotation.y=-.4;
  // bone and metal arms replace sleeves, armour and hands; bare skin shows on muscular and clawed arms
  const own={bone:BONE,metal:METAL}[S.arms],skinArm=bare||hide||S.arms==='muscular'||S.arms==='claws',am=S.arms==='metal'?1:0;
  const sleeve=own||(skinArm?flesh:metal?METAL:chain?shade(METAL,-.28):top),fore=own||(skinArm?flesh:sleeve),cuffC=own||(metal?METAL:skinArm?LEATHER:trim),handC=own||(metal?shade(METAL,-.1):flesh),armour=metal&&!own,ad=dw*S.thick*({muscular:1.35,bone:.6}[S.arms]||1);
@@ -150,11 +180,11 @@ export function buildHero(hero){
   return{sh,el,wr,hand:grp(wr,0,-.55,0),s}});
  // faceless faceted head (narrow egg, reference proportions)
  const neck=refs.neck=grp(model,0,hipY+5.15,0);
- T(neck,[[-.25,.44,.42],[.7,.37,.38,0,.04]],{n:6,cols:[sk]});
+ const nk=B?B.neck:1;T(neck,[[-.25,.44*nk,.42*nk],[.7,.37*nk,.38*nk,0,.04]],{n:6,cols:[sk]});
  const shape=S.head,heroic=shape==='heroic',beast=shape==='beast'||(R.snout&&shape!=='skull'&&shape!=='bird'&&!heroic),noFace=shape==='skull'||shape==='bird';
  const head=refs.head=grp(neck,0,.62,0);head.scale.set(.82*hk,1.04*hk,.9*hk);
  const jaw=S.beard==='stubble'?mix(sk,hc,.35):sk;
- const heroC=heroic&&{skin:sk,shade:shade(sk,-.12),dark:shade(sk,-.62),lip:mix(sk,'#8a3a3a',fem?.55:.35),bone:'#efe2c4',horn:S.race==='Tiefling'?'#4a3238':'#d8c8a8',hair:S.hair==='bald'||covered?shade(sk,-.4):hc,inner:mix(sk,'#6a2a2a',.28),white:'#f4f0e8'};
+ const heroC={skin:sk,shade:shade(sk,-.12),dark:shade(sk,-.62),lip:mix(sk,'#8a3a3a',fem?.55:.35),bone:'#efe2c4',horn:S.race==='Tiefling'?'#4a3238':'#d8c8a8',hair:S.hair==='bald'||covered?shade(sk,-.4):hc,inner:mix(sk,'#6a2a2a',.28),white:'#f4f0e8'};
  if(heroic)racePart(head,'head.'+S.race+(fem?'.f':''),heroC);
  else if(shape==='square')box(head,1.9,2.25,1.8,sk,0,1.15);
  else if(shape==='round')T(head,[[0,.6,.6,0,.2],[.35,1.0,.98,0,.05],[.85,1.15,1.08],[1.35,1.16,1.08],[1.85,1.0,.97],[2.3,.55,.55]],{n:8,cols:[jaw,jaw,sk]});
@@ -166,7 +196,7 @@ export function buildHero(hero){
  const disc=(p,r,c,x,y,z,sx,sy,seg=8,th=Math.PI*2,ts=0)=>{const d=add(p,new THREE.CylinderGeometry(r,r,.012,seg,1,false,ts,th),c,x,y,z);d.rotation.x=Math.PI/2;d.scale.set(sx,1,sy);return d};
  const bearded=S.beard==='short'||S.beard==='long';
  // heroic heads are sculpted, so the same face sits wherever that head's surface is
- const F=heroic&&RACE_FACE[S.race+(fem?'.f':'')],eyeY=F?1.1:1.0,dragon=heroic&&S.race==='Dragonborn';
+ const F=heroic&&RACE_FACE[S.race+(fem?'.f':'')],eyeY=F?1.1:1.0,dragon=heroic&&['Dragonborn','Werewolf','Lizardfolk','Minotaur','Aarakocra'].includes(S.race); // muzzles and beaks have their own mouth
  refs.eyes=[-1,1].map(s=>{const g=grp(head,s*.38,eyeY,F?F[0]+.035:.915);g.rotation.y=s*(F?.3:.42);
   if(fem&&heroic)box(g,.13,.032,.02,'#140d10',s*.15,.15,.03).rotation.z=s*.6; // lashes
   if(shape==='skull')disc(g,.27,'#140d10',0,0,.004,1,1);
@@ -176,26 +206,31 @@ export function buildHero(hero){
   if(S.hat!=='helm'&&S.hat!=='horned')box(g,.2,.045,.02,S.hair==='bald'||covered?shade(S.skin,-.4):S.hairC,s*.02,.32,F?F[3]-F[0]+.015:.02).rotation.z=s*.18} // short soft brow
   return g});
  if(!bearded&&!noFace&&!dragon)[-1,1].forEach(s=>{const c=grp(head,s*.52,.72,F?F[1]+.025:.83);c.rotation.y=s*.55;disc(c,.13,mix(S.skin,'#ff7f86',.42),0,0,.01,1.25,.62)}); // blush
- if(!bearded&&!beast&&!noFace&&!dragon){const m=grp(head,0,.56,F?F[2]+.03:1.035);disc(m,.08,'#5a2a2e',0,0,.012,1.3,1,8,Math.PI,-Math.PI/2)} // tiny smile
+ if(!bearded&&!beast&&!noFace&&!dragon&&!(heroic&&S.race==='Harengon')){const m=grp(head,0,.56,F?F[2]+.03:1.035);disc(m,.08,'#5a2a2e',0,0,.012,1.3,1,8,Math.PI,-Math.PI/2)} // tiny smile
  if(beast){T(head,[[.3,.62,.42,0,.62],[.9,.56,.4,0,.6],[1.5,.4,.3,0,.58],[1.85,.22,.18,0,.58]],{n:6,axis:'z',cols:[sk]});if(shape==='beast')sph(head,.17,'#2a1a1a',0,.7,1.86)}
  else if(shape==='bird'){cone(head,.45,1.35,'#e8a83a',0,.72,1.5,4).rotation.x=Math.PI/2+.18;cone(head,.28,.7,'#c8842a',0,.45,1.25,3).rotation.x=Math.PI/2-.15}
  else if(shape==='skull'||heroic){}
  else if(R.cat)cone(head,.12,.2,'#d98a9a',0,.92,1.08,3).rotation.x=Math.PI/2;
  else cone(head,R.nose?.3:.17,R.nose?.62:.42,R.nose?shade(sk,.04):sk,0,.95,R.nose?1.25:1.12,3).rotation.x=Math.PI/2;
  if(heroic){ // modelled ears, horns and tusks; the Ears and Horns choices still apply
-  const own={Human:['round'],Elf:['long'],Dwarf:['round'],Halfling:['small'],Gnome:['small'],'Half-Orc':['long',.62],Tiefling:['long',.55],Tabaxi:['cat'],Goliath:['round'],Aasimar:['round'],Goblin:['goblin']}[S.race];
+  const own={Human:['round'],Elf:['long'],Dwarf:['round'],Halfling:['small'],Gnome:['small'],'Half-Orc':['long',.62],Tiefling:['long',.55],Tabaxi:['cat'],Goliath:['round'],Aasimar:['round'],Goblin:['goblin'],Fairy:['long',.75],Dhampir:['long',.5],Werewolf:['cat',1.05],Centaur:['long',.45],Satyr:['goblin',.55],Minotaur:['goblin',.6],Firbolg:['goblin',.7]}[S.race];
   const [ear,size=1]=S.ears==='race'?own||[]:[{elf:'long'}[S.ears]||S.ears];
-  if(ear&&ear!=='none'&&!(ear==='cat'&&covered))racePart(head,'ear.'+ear,heroC,v=>v.map((c,i)=>[.95,1.18,-.08][i]+(c-[.95,1.18,-.08][i])*size));
+  if(ear&&ear!=='none'&&ear!=='rabbit'&&!(ear==='cat'&&covered))racePart(head,'ear.'+ear,heroC,v=>v.map((c,i)=>[.95,1.18,-.08][i]+(c-[.95,1.18,-.08][i])*size));
   if(horns==='tief'||horns==='drag')racePart(head,'horn.'+horns,{...heroC,horn:horns==='tief'?'#4a3238':heroC.horn});
   if(R.tusks)racePart(head,'tusk',heroC,fem?v=>v.map((c,i)=>[.33,.42,1.04][i]+(c-[.38,.42,1.08][i])*.65):undefined);
  }
+ // parts that only exist as models, so they are used on any head
+ if(ears==='rabbit'&&!covered)racePart(head,'ear.rabbit',heroC);
+ if(horns==='ram'||horns==='bull')racePart(head,horns==='ram'?'horn.tief':'horn.bull',{...heroC,horn:'#d8c8a8',bone:'#efe2c4'});
+ if(heroic&&S.race==='Aarakocra')racePart(head,'beak',{...heroC,bone:'#e8a83a'});
+ if(heroic&&S.race==='Minotaur')add(head,new THREE.TorusGeometry(.24,.055,4,10),MM(GOLD),0,.28,1.8);
  [-1,1].forEach(s=>{
   const plainEars=S.ears!=='race'||(!beast&&!noFace);
   if(heroic){}
   else if(ears==='elf')cone(head,.2,1.1,sk,s*1.3,1.3,-.05,3).rotation.z=-s*(Math.PI/2-.5);
   else if(ears==='goblin')cone(head,.36,1.8,sk,s*1.78,1.2,0,3).rotation.z=-s*(Math.PI/2-.15);
   else if(ears==='cat'){if(!covered)cone(head,.4,.8,sk,s*.6,2.3,0,3).rotation.z=-s*.35}
-  else if(ears!=='none'&&plainEars)sph(head,ears==='small'?.17:.22,sk,s*(shape==='round'?1.15:.98),1.05,-.05,.45,1,.75);
+  else if(ears!=='none'&&ears!=='rabbit'&&plainEars)sph(head,ears==='small'?.17:.22,sk,s*(shape==='round'?1.15:.98),1.05,-.05,.45,1,.75);
   if(horns==='antlers'){const g=grp(head,s*.5,2.1,-.1);g.rotation.z=-s*.5;cyl(g,.09,.14,1.7,'#c9ad82',0,.8,0,5);[[.7,.9,.7],[1.3,-.75,.6],[1.6,.5,.5]].forEach(([y,a,l])=>{const t=grp(g,0,y,0);t.rotation.z=a*s;cone(t,.08,l*1.5,'#d8c096',0,l*.7,0,4)})}
   if(horns==='tief'&&!heroic){const g=grp(head,s*.5,2.1,.2);g.rotation.z=-s*.45;cone(g,.2,.8,'#3a2a2e',0,.4,0,5);const g2=grp(g,0,.72,0);g2.rotation.x=-1;cone(g2,.13,.6,'#4a3840',0,.28,0,5)}
   if(horns==='drag'&&!heroic){const g=grp(head,s*.45,1.8,-.7);g.rotation.set(-1.3,0,-s*.25);cone(g,.2,1.3,'#efe2c4',0,.65,0,5)}
@@ -217,8 +252,8 @@ export function buildHero(hero){
  if(S.face==='glasses'){[-1,1].forEach(s=>{const g=grp(head,s*.42,eyeY,1.07);g.rotation.y=s*.4;add(g,new THREE.TorusGeometry(.27,.045,4,10),MM(GOLD))});box(head,.3,.06,.05,MM(GOLD),0,eyeY+.06,1.17)}
  if(S.face==='eyepatch'){const g=grp(head,.4,eyeY,1.0);g.rotation.y=.42;disc(g,.28,'#17110f',0,0,.05,1,1);box(head,2.0,.1,.06,'#17110f',0,eyeY+.32,heroic?1.08:1.02).rotation.z=-.28}
  if(S.face==='mask')T(head,[[.05,.55,.55,0,.44],[.4,.86,.88,0,.24],[.82,1.0,1.09,0,.1]],{n:8,dbl:1,cols:[shade(top,-.35)],cap0:false,cap1:false});
- if(S.neck==='scarf'){add(model,new THREE.TorusGeometry(.62,.28,5,9),trim,0,hipY+5.2,.05).rotation.x=Math.PI/2;box(model,.5,2,.16,trim,.5,hipY+4.2,1.12*dw*deep).rotation.z=.18}
- if(S.neck==='amulet'){add(model,new THREE.TorusGeometry(.8,.06,4,12),MM(GOLD),0,hipY+4.75,.35*dw).rotation.x=Math.PI/2-.75;addGlow(add(model,new THREE.OctahedronGeometry(.3),glow(S.eye),0,hipY+3.9,1.18*dw*deep),S.eye,1.6)}
+ if(S.neck==='scarf'){add(model,new THREE.TorusGeometry(.62,.28,5,9),trim,0,hipY+5.2,.05).rotation.x=Math.PI/2;box(model,.5,2,.16,trim,.5,hipY+4.2,1.12*dw*deep(4.2)).rotation.z=.18}
+ if(S.neck==='amulet'){add(model,new THREE.TorusGeometry(.8,.06,4,12),MM(GOLD),0,hipY+4.75,.35*dw).rotation.x=Math.PI/2-.75;addGlow(add(model,new THREE.OctahedronGeometry(.3),glow(S.eye),0,hipY+3.9,1.18*dw*deep(3.9)),S.eye,1.6)}
  switch(S.hat){
   case'horned':{const hg=grp(head,0,1.2,0);hg.rotation.x=-.5;T(hg,[[-.1,1.1,1.16,0,-.04],[.5,1.12,1.18],[1.0,.94,1.02,0,-.06],[1.35,.4,.48,0,-.08]],{n:8,metal:1,dbl:1,cols:[METAL],cap0:false});
    [-1,1].forEach(s=>{const g=grp(head,s*1.0,1.85,-.1);g.rotation.z=-s*1.1;cone(g,.3,1.1,'#efe2c4',0,.5,0,5);const g2=grp(g,0,.95,0);g2.rotation.z=s*.9;cone(g2,.17,.8,'#e2d0aa',0,.35,0,5)});break}
@@ -234,17 +269,20 @@ export function buildHero(hero){
   case'crown':add(head,new THREE.CylinderGeometry(.82,.86,.38,7,1,true),{metal:GOLD,dbl:1},0,2.25,0);for(let i=0;i<5;i++){const a=i/5*Math.PI*2+Math.PI/2;cone(head,.12,.35,MM(GOLD),Math.cos(a)*.82,2.6,Math.sin(a)*.82,3)}addGlow(sph(head,.12,glow('#e5484d'),0,2.25,.88),'#e5484d',.8);break;
   case'cap':{const k=sph(head,1.05,top,0,2.15,-.05,1.1,.42,1.1,8);k.rotation.z=.2;cone(head,.1,1.6,trim,.8,2.7,-.3,3).rotation.z=-.6;break}
  }
- const back=-1.04*dw*(S.torso==='broad'?1.08:1);
+ const back=-1.04*dw*(B?B.z(3.8):S.torso==='broad'?1.08:1);
  if(S.cape==='cape'||S.cape==='long'){const cc=metal?top:shade(top,-.18),long=S.cape==='long',len=long?hipY+4:tail?4:hipY+2.4,n=2,sh=len/n,cw=(long?4.2:3.5)*w;let p=refs.cape=grp(model,0,shY+.2,back);
   for(let i=0;i<n;i++){box(p,cw,sh,.1,cc,0,-sh/2);p=grp(p,0,-sh,0);refs.capeSegs.push(p)}box(refs.cape,cw+.05,.22,.12,trim,0,.11)}
  if(S.cape==='quiver'){const q=grp(model,.5*w,hipY+3,back-.55);q.rotation.z=-.5;cyl(q,.7,.55,4,LEATHER,0,0,0,7);cyl(q,.75,.75,.35,trim,0,1.9,0,7);[[-.3,0],[.25,.2],[0,-.3],[.35,-.2]].forEach(([x,z])=>{cyl(q,.08,.08,1.6,WOOD,x,2.6,z,4);cone(q,.24,.7,trim,x,3.5,z,3)})}
  if(S.cape==='backpack'){box(model,2.5*w,3,1.5,LEATHER,0,hipY+2.7,back-.65);box(model,2.6*w,.9,1.6,shade(LEATHER,-.2),0,hipY+4,back-.65);cyl(model,.65,.65,3*w,trim,0,hipY+4.9,back-.6,8).rotation.z=Math.PI/2;box(model,.5,.6,.2,MM(GOLD),0,hipY+3.4,back-1.45)}
+ if(S.cape==='fairywings')[-1,1].forEach(s=>{const wing=grp(model,s*.5*w,hipY+3.8,back-.25);wing.rotation.y=s*.4;
+  [[.75,7,2.1,'#bfeaff'],[2.15,4.8,1.5,'#e8c8ff']].forEach(([a,len,wide,c])=>{const f=add(wing,new THREE.OctahedronGeometry(1),glow(c),s*Math.sin(a)*len/2,Math.cos(a)*len/2,0);f.scale.set(wide/2,len/2,.07);f.rotation.z=-s*a})});
  if(S.cape==='featherwings'||S.cape==='batwings')[-1,1].forEach(s=>{const wing=grp(model,s*.7*w,hipY+3.8,back-.2);wing.rotation.y=s*.45;
   if(S.cape==='featherwings'){[1,.9,.76,.6,.44].forEach((l,k)=>{const h=6.5*l,a=.3+.09*k,f=cone(wing,.75,h,k%2?'#e4e2ea':'#fbfaff',s*(1+k*.95+Math.sin(a)*h/2),2.3+k*.45-Math.cos(a)*h/2,-k*.08,4);f.rotation.z=Math.PI+s*a;f.scale.z=.16});cyl(wing,.2,.32,5.4,'#d9d4e0',s*2.4,2.9,0,5).rotation.z=-s*1.15}
   else{const skin=shade(horns?flesh:'#5a2a44',-.35);cyl(wing,.14,.28,5.8,shade(skin,-.3),s*2.5,2.3,0,5).rotation.z=-s*1.1;[[1.5,4.2],[3.1,4.6],[4.7,3.6]].forEach(([x,l],k)=>{const m=cone(wing,1.35,l,skin,s*x,1.8+k*.65-l/2,-.05,3);m.rotation.z=Math.PI+s*.12*k;m.scale.z=.1});cone(wing,.2,1,'#e8dcc4',s*5.2,4,0,4).rotation.z=-s*.5}});
- if(tail){const cf={drag:[5,.42,1.0,-.7,.22,.8],cat:[6,.16,.75,-.9,.38,.92],tief:[6,.09,.8,-1,.28,.95]}[tail],tc=tail==='tief'?shade(sk,-.1):sk;
-  const tg=refs.tail=grp(model,0,hipY+.2,-.75*dw);tg.rotation.x=cf[3];let p=tg,r=cf[1];
+ if(tail){const cf={drag:[5,.42,1.0,-.7,.22,.8],cat:[6,.16,.75,-.9,.38,.92],tief:[6,.09,.8,-1,.28,.95],wolf:[4,.45,.95,-.85,.2,.9],horse:[4,.4,1.15,-1.05,-.14,.9],bull:[6,.12,.8,-1.2,.06,.96],bunny:[1,.6,.5,.2,0,.8]}[tail],tc=tail==='tief'?shade(sk,-.1):tail==='horse'?shade(hc,-.2):tail==='bunny'?'#f4f0e8':sk;
+  const tg=refs.tail=grp(model,0,hipY+.2,horse?-7:-.75*dw);tg.rotation.x=cf[3];let p=tg,r=cf[1];
   for(let i=0;i<cf[0];i++){T(p,[[0,r,r],[-cf[2]-.05,r*cf[5],r*cf[5]]],{n:5,axis:'z',cols:[tc]});p=grp(p,0,0,-cf[2]);p.rotation.x=cf[4];r*=cf[5]}
+  if(tail==='bull')sph(p,.34,shade(hc,-.2),0,0,.1);
   if(tail==='tief')cone(p,.35,.6,shade(sk,-.3),0,0,-.25,3).rotation.x=-Math.PI/2}
  [[S.main,0],[S.off,1]].forEach(([it,i])=>{if(it==='none')return;const A=refs.arms[i],s=A.s;
   if(it==='lute'){const l=item('lute');l.scale.setScalar(.38);l.position.set(0,hipY+2.4,1.05*dw);l.rotation.z=.95;model.add(l);return}
@@ -288,6 +326,7 @@ export function applyPose(r,pose,t){const [A,B]=r.arms,[L0,L1]=r.legs;
  else if(pose==='cry'){r.arms.forEach(toFace);r.neck.rotation.x=.4+Math.sin(t*14)*.04;tilt=.08;sway=Math.sin(t*14)*.025}
  else if(pose==='fart'){const k=Math.sin(Math.PI*Math.min(1,(t%1.4)/1.1));r.arms.forEach(a=>{a.sh.rotation.z+=a.s*.45*k});r.legs.forEach(l=>{l.hip.rotation.x=-.55*k;l.knee.rotation.x=1*k});r.neck.rotation.x=-.2*k;tilt=.25*k;y=-1*k}
  else{const w=Math.sin(t*1.6);A.sh.rotation.z+=-w*.02;B.sh.rotation.z+=w*.02}
+ r.back?.forEach((b,i)=>{const l=r.legs[1-i];b.hip.rotation.copy(l.hip.rotation);b.knee.rotation.copy(l.knee.rotation)}); // diagonal pairs step together
  return{y,z,cw,tilt,sway,spin}}
 
 // ---- minis for the table: a human about 1.15 squares tall ----
@@ -312,7 +351,7 @@ function template(hero) {
   const beast = hero.creature ? buildCreature(hero, kit()) : null, { model, refs: r } = beast ? { model: beast.model, refs: {} } : buildHero(hero);
   if (beast) model.scale.setScalar(beast.sc); else applyPose(r, "idle", 0);
   model.updateMatrixWorld(true);
-  const joints = beast ? [model, ...beast.limbs.map((l) => l.node)] : [model, ...r.legs.flatMap((l) => [l.hip, l.knee]), ...r.arms.flatMap((a) => [a.sh, a.el]), r.neck], owned = joints.map(() => []), all = [];
+  const joints = beast ? [model, ...beast.limbs.map((l) => l.node)] : [model, ...r.legs.flatMap((l) => [l.hip, l.knee]), ...r.arms.flatMap((a) => [a.sh, a.el]), r.neck, ...(r.back || []).flatMap((l) => [l.hip, l.knee])], owned = joints.map(() => []), all = [];
   model.traverse((o) => { if (!o.isMesh) return; let p = o; while (!joints.includes(p)) p = p.parent; owned[joints.indexOf(p)].push(o); all.push(o); });
   const fit = new THREE.Matrix4().makeScale(SIZE, SIZE, SIZE);
   const out = {
@@ -333,7 +372,7 @@ export function makeMini(hero, looks) {
   m.nodes.forEach((n, i) => { if (!i) return; nodes[i].position.copy(n.position); nodes[i].rotation.copy(n.rotation); nodes[n.parent].add(nodes[i]); });
   const bob = new THREE.Group();   // what floats
   rig.scale.setScalar(m.sc * SIZE); rig.visible = false; bob.add(still, rig); group.add(bob);
-  const [, h0, k0, h1, k1, s0, e0, s1, e1, neck] = nodes, limbs = { neck, fwd: m.fwd, legs: [{ hip: h0, knee: k0, s: -1 }, { hip: h1, knee: k1, s: 1 }], arms: [{ sh: s0, el: e0, s: m.sides[0] }, { sh: s1, el: e1, s: m.sides[1] }] };
+  const [, h0, k0, h1, k1, s0, e0, s1, e1, neck, h2, k2, h3, k3] = nodes, limbs = { neck, fwd: m.fwd, back: h3 && !m.creature ? [{ hip: h2, knee: k2 }, { hip: h3, knee: k3 }] : null, legs: [{ hip: h0, knee: k0, s: -1 }, { hip: h1, knee: k1, s: 1 }], arms: [{ sh: s0, el: e0, s: m.sides[0] }, { sh: s1, el: e1, s: m.sides[1] }] };
   const pose = (name, t) => {
     still.visible = !name; rig.visible = !!name; if (!name) return;
     const body = m.creature ? moveCreature(m.creature.limbs.map((l, i) => ({ ...l, node: nodes[i + 1] })), name, t) : applyPose(limbs, name, t); rig.position.set(0, body.y * m.sc * SIZE, body.z * m.sc * SIZE); rig.rotation.set(body.tilt, body.spin, body.sway);

@@ -21,7 +21,18 @@
   table. Cheek markings and male/female differences are faint at a distance; the old helm looks patchy on these heads.
 - Also in Blockbench, not part of the game: a sailing ship (unsaved) and an illithid dragon exported to
   `Documents\illithid_dragon.glb`. Companion save and pack fixes are recorded in GeezSheets.
-- **Next:** torsos in the same Blockbench-to-data way.
+
+### Done (later: torsos and extended races)
+- **Torso > Heroic:** a build per race, male and female. Done as ring sizes in `js/vtt/blockfolk.js` (not Blockbench
+  meshes), so every outfit follows the body.
+- **10 new races:** Fairy, Dhampir, Werewolf, Centaur, Satyr, Minotaur, Firbolg, Lizardfolk, Aarakocra, Harengon, with
+  male and female heads. New legs (goat, paws, talons, centaur), rabbit ears, ram and bull horns, wolf, horse, bull and
+  bunny tails, and fairy wings. A new race starts with the heroic head and its own legs, tail and wings.
+- Tests pass (90). Renders and table minis checked; not yet clicked through in the creator or tried on the live table.
+- **Left:** centaur drops long skirts and tabards and its sit/sleep poses are unchecked; Dhampir fangs and the Werewolf
+  snout are hard to see; fairy wings do not flap. Click through the creator and place a few new minis on the table.
+- Editable Blockbench projects and the Blockbench-to-data script (`blockbench-parts.cjs`, run as
+  `node blockbench-parts.cjs race_heads.bbmodel js/vtt/raceparts-data.js`) are in `Documents\Blockbench`, not the repo.
 
 ### Where it stands
 - Tests pass. A `companion.html` skill roll showed on the live GM board (two tabs on one computer).

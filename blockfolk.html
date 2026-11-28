@@ -128,8 +128,8 @@ import { buildHero, tex, applyPose } from "./js/vtt/blockfolk.js";
 import { EMOTES } from "./js/vtt/acts.js";
 const $=s=>document.querySelector(s);
 let S={},refs={};
-const applyRace=r=>{const R=RACES[r];S.race=r;S.skin=R.skins[0];S.hair=R.hair;S.beard=S.sex==='female'?'none':R.beard||'none'};
-const applyClass=c=>{S.cls=c;Object.assign(S,CLASSES[c])};
+const applyRace=r=>{const R=RACES[r];S.race=r;S.skin=R.skins[0];S.hair=R.hair;S.beard=S.sex==='female'?'none':R.beard||'none';S.legs=R.legs||'normal';if(R.face)S.head=R.face;S.cape=R.cape||CLASSES[S.cls]?.cape||'none'};
+const applyClass=c=>{S.cls=c;Object.assign(S,CLASSES[c]);const w=RACES[S.race]?.cape;if(w)S.cape=w};
 applyRace('Dwarf');applyClass('Fighter');Object.assign(S,{name:'Brannoc Ironvein',hairC:'#c94a2a',eye:'#3a6ab0'});
 S=cleanHero(S);
 
@@ -214,7 +214,7 @@ const pick=a=>a[Math.random()*a.length|0];
 $('#rand').onclick=()=>{applyRace(pick(Object.keys(RACES)));applyClass(pick(Object.keys(CLASSES)));const R=RACES[S.race];
  S.skin=pick(R.skins);S.hair=Math.random()<.6?R.hair:pick(HAIRS);S.hairC=pick(HAIRC);S.eye=pick(EYES);
  S.beard=R.beard||(Math.random()<.25?pick(BEARDS):'none');
- for(const [k,list] of Object.entries(PARTS))S[k]=Math.random()<.12?pick(list):list[0];if(Math.random()<.5){S.sex='female';S.beard='none'}for(const k of Object.keys(SLIDERS))S[k]=Math.random()<.3?Math.round((.85+Math.random()*.3)*20)/20:1;if(Math.random()<.3)S.hat=pick(HATS);if(Math.random()<.25)S.cape=pick(CAPES);S.name=pick(SY1)+pick(SY2);boost=.35;update()};
+ for(const [k,list] of Object.entries(PARTS))S[k]=Math.random()<.12?pick(list):list[0];if(Math.random()<.5){S.sex='female';S.beard='none'}for(const k of Object.keys(SLIDERS))S[k]=Math.random()<.3?Math.round((.85+Math.random()*.3)*20)/20:1;if(Math.random()<.3)S.hat=pick(HATS);if(Math.random()<.25)S.cape=pick(CAPES);if(R.legs)S.legs=R.legs;if(R.face)S.head=R.face;if(R.cape)S.cape=R.cape;S.name=pick(SY1)+pick(SY2);boost=.35;update()};
 
 let party=[];try{party=JSON.parse(localStorage.getItem('blockfolk-party')||'[]');if(!Array.isArray(party))party=[]}catch(e){party=[]}
 const saveParty=()=>{try{localStorage.setItem('blockfolk-party',JSON.stringify(party))}catch(e){}};
