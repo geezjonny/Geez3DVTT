@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { cleanHero, RACES, CLASSES, SLIDERS } from "../blockfolk-data.js";
 import { PRESETS, MONSTER_COLORS } from "../blockcreature-data.js";
+import { RACE_PARTS, RACE_FACE } from "../raceparts-data.js";
 
 test("a hero code keeps good values and replaces bad ones with defaults", () => {
   const h = cleanHero({ race: "Elf", cls: "Wizard", hat: "crown", top: "#112233", skin: "red", main: "<img>", junk: 1 });
@@ -14,6 +15,18 @@ test("body parts and sliders take known values, clamped, with plain defaults for
   assert.deepEqual([old.head, old.ears, old.shoulders, old.height, old.legLen], ["normal", "race", "auto", 1, 1]);
   const h = cleanHero({ race: "Human", cls: "Bard", head: "skull", arms: "tentacle", height: 9, build: "0.1", thick: "big" });
   assert.deepEqual([h.head, h.arms, h.height, h.build, h.thick], ["skull", "normal", SLIDERS.height[1], SLIDERS.build[0], 1]);
+});
+
+test("the female body and heroic head are kept, and every race has both heroic heads", () => {
+  const h = cleanHero({ race: "Elf", cls: "Wizard", sex: "female", head: "heroic" });
+  assert.deepEqual([h.sex, h.head, cleanHero({ race: "Elf", cls: "Wizard" }).sex], ["female", "heroic", "male"]);
+  for (const race of Object.keys(RACES)) {
+    for (const name of ["head." + race, "head." + race + ".f"]) {
+      assert.equal(RACE_FACE[name.slice(5)]?.filter(Number.isFinite).length, 4, name);
+      const { v, f } = RACE_PARTS[name];
+      assert.ok(Object.values(f).every((ids) => ids.length % 3 === 0 && ids.every((i) => Number.isInteger(v[i * 3 + 2]))), name);
+    }
+  }
 });
 
 test("a monster code is checked as a monster, and the first Squishy mini still loads", () => {

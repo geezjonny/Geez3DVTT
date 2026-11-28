@@ -33,7 +33,7 @@ export const HAIRS=['bald','short','long','mohawk','bun','braids'],BEARDS=['none
 export const HATS=['none','hood','wizard','helm','horned','crown','circlet','cap','feather','tophat','bandana'],STYLES=['cloth','leather','studded','hide','chain','scale','plate','robe','coat','bare'],CAPES=['none','cape','long','quiver','backpack','featherwings','batwings'];
 export const ITEMS=['none','sword','greatsword','rapier','dagger','axe','mace','hammer','flail','club','spear','trident','scythe','staff','rod','wand','bow','crossbow','shield','towershield','buckler','book','orb','lute','torch','lantern','potion','tankard','skull','banner'];
 // body parts and extras: the first choice is the default ('race' and 'auto' follow the race or outfit)
-export const PARTS={head:['normal','round','square','long','skull','beast','bird'],torso:['normal','slim','broad','belly'],arms:['normal','muscular','bone','claws','metal'],legs:['normal','bone','metal','hooves','peg'],
+export const PARTS={sex:['male','female'],head:['normal','round','square','long','skull','beast','bird','heroic'],torso:['normal','slim','broad','belly'],arms:['normal','muscular','bone','claws','metal'],legs:['normal','bone','metal','hooves','peg'],
  ears:['race','none','round','elf','goblin','cat'],horns:['race','none','tief','drag','antlers'],tail:['race','none','drag','cat','tief'],face:['none','glasses','eyepatch','mask'],neck:['none','scarf','amulet'],shoulders:['auto','none','pauldrons','spikes','fur']};
 export const SLIDERS={height:[.7,1.4],build:[.75,1.4],headSize:[.7,1.45],armLen:[.75,1.35],legLen:[.7,1.35],thick:[.6,1.6]}; // all 1 to start
 export const HAIRC=['#2a1d14','#5a3a22','#8a5a2a','#c98a3a','#e8d08a','#c94a2a','#e8e6e0','#4a5aa6','#7a3a8a','#1c1c1c'];

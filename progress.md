@@ -11,6 +11,18 @@
 - **Skill rolls (GeezSheets):** `sheet.html` now sends rolls to the board; both sheet pages warn when a send fails.
 - Token sizes checked: Medium to Gargantuan are 1 to 4 squares, as in D&D.
 
+### Done (later: Blockbench and race heads)
+- **Heroic heads** (`blockfolk.html`, **Head > Heroic**): sculpted head shapes, ears, horns and tusks for all 12 races,
+  male and female, with the cute sparkly-eyed face drawn on top. Dragonborn keeps a modelled snout and teeth.
+- **Body > Female:** female head, narrower shoulders and waist, wider hips. Old hero codes stay male with their old head.
+- Shapes were modelled in Blockbench and stored in `js/vtt/raceparts-data.js`. The Blockbench-to-data script and the
+  `race_heads` project are not in the repo (temporary folder / unsaved tab).
+- Tests pass (88). All 24 heads render and build as table minis; not yet clicked through in the creator or on the live
+  table. Cheek markings and male/female differences are faint at a distance; the old helm looks patchy on these heads.
+- Also in Blockbench, not part of the game: a sailing ship (unsaved) and an illithid dragon exported to
+  `Documents\illithid_dragon.glb`. Companion save and pack fixes are recorded in GeezSheets.
+- **Next:** torsos in the same Blockbench-to-data way.
+
 ### Where it stands
 - Tests pass. A `companion.html` skill roll showed on the live GM board (two tabs on one computer).
 - Why players' rolls did not show in the session is unknown; only one reached the database that night.
