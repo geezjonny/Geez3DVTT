@@ -139,6 +139,8 @@ export function initStealth({ myToken, toast }) {
     const lights = [...Object.values(S.objects).filter((o) => o.kind === "light" && o.state === "on").map((o) => ({ x: o.x, y: o.y, lv: o.lv ?? 0, radius: o.radius || 120 })),
       ...all.filter(([, t]) => t.torch).map(([, t]) => ({ x: t.x, y: t.y, lv: t.lv ?? 0, radius: 120 }))];
 
+    const drawing = S.isGM && S.pick?.zone === "patrol" ? S.pick : null;   // that guard waits while its route is drawn
+    if (drawing) brains.delete(drawing.id);
     const seeing = new Set(), cones = [], marks = [], mine = S.isGM ? null : myToken(), changes = {};
     for (const [gid, g] of guards) {
       const around = near(g); let alert = false;
@@ -154,7 +156,7 @@ export function initStealth({ myToken, toast }) {
         if (brain.wrote && Math.hypot(g.x - brain.wrote.x, g.y - brain.wrote.y) > 6) {   // the GM dragged them: face that way, new post
           const face = Math.round(Math.atan2(g.y - brain.wrote.y, g.x - brain.wrote.x) * 180 / Math.PI);
           changes[`tokens/${gid}/face`] = face; Object.assign(brain, { path: null, mode: "home", post: { x: g.x, y: g.y, face }, wrote: { x: g.x, y: g.y } });
-        } else if (!g.frozen && !S.paused && !S.combat && !S.dragging && !alert) {
+        } else if (!g.frozen && !S.paused && !S.combat && !S.dragging && !alert && gid !== drawing?.id) {
           for (const [tid, t] of targets) if (stepped.has(tid) && !(brain.heard > Date.now()) && canHear(g, t, t.sneak ? NOISE.sneak : NOISE.normal, around)) {
             Object.assign(brain, { mode: "invest", target: { x: t.x, y: t.y }, path: null, heard: Date.now() + 3500 }); toast(`${g.label || "A guard"} heard something.`);
           }
@@ -171,6 +173,7 @@ export function initStealth({ myToken, toast }) {
       if ((g.lv ?? 0) === (S.level ?? 0) && (S.isGM || !g.hidden)) cones.push({ points: cone(g, around), alert, searching: g.mood === "searching" });
     }
     if (Object.keys(changes).length) patch(changes);
+    for (const [x, y] of drawing?.route || []) marks.push({ x, y, color: 0x7fc8ff });
 
     const t = mine && S.tokens[mine];
     panel.hidden = !on || !t;

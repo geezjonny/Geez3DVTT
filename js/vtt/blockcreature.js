@@ -58,6 +58,13 @@ export function buildCreature(c, kit) {
 
   // ---- head and face
   const ownHead = !!B.front && c.head === "auto"; // squid, orb and blob wear their face on the body
+  const dragon = c.head === "dragon";
+  if (dragon && c.body !== "serpent") { // a dragon carries its head out on a neck
+    const [hx, hy, hz] = B.headAt, bend = [0, hy + 1.2, hz - 0.8];
+    rod(body, [0, hy - 2.3, hz - 2.5], bend, 1.9 * k, 1.4 * k, skin); sph(body, 1.4 * k, skin, ...bend, 1, 1, 1, 8);
+    rod(body, bend, [0, hy + 4, hz + 0.9], 1.4 * k, 1.1 * c.headSize, skin);
+    B.headAt = [hx, hy + 4.2, hz + 1.4];
+  }
   let head, F, headTop;
   if (ownHead) { head = body; F = B.front; headTop = [0, B.top - 0.6, B.front.z]; }
   else {
@@ -65,27 +72,57 @@ export function buildCreature(c, kit) {
     head = joint(model, "head", hx, lift + hy, hz);
     const kind = c.head;
     if (kind === "skull") { sph(head, r, BONE, 0, 0, 0, 1, 1, 1, 8); box(head, r * 1.1, r * 0.55, r * 0.8, shade(BONE, -0.08), 0, -r * 0.85, r * 0.35); }
-    else sph(head, r, skin, 0, 0, 0, 1, 0.92, 1, 8);
-    if (kind === "beast" || kind === "dragon") {
-      const long = kind === "dragon" ? 1.35 : 1;
-      T(head, [[r * 0.4, r * 0.72, r * 0.5, 0, -r * 0.3], [r * 1.2 * long, r * 0.52, r * 0.38, 0, -r * 0.38], [r * 1.65 * long, r * 0.3, r * 0.24, 0, -r * 0.4]], { n: 6, axis: "z", cols: [skin, pale] });
-      sph(head, r * 0.17, DARK, 0, -r * 0.24, r * 1.68 * long);
-      for (const s of [-1, 1]) cone(head, r * 0.3, r * (kind === "beast" ? 0.9 : 0.6), dark, s * r * 0.72, r * 0.85, -r * 0.15, 3).rotation.z = -s * 0.45;
+    else if (!dragon) sph(head, r, skin, 0, 0, 0, 1, 0.92, 1, 8);
+    if (kind === "beast") {
+      T(head, [[r * 0.4, r * 0.72, r * 0.5, 0, -r * 0.3], [r * 1.2, r * 0.52, r * 0.38, 0, -r * 0.38], [r * 1.65, r * 0.3, r * 0.24, 0, -r * 0.4]], { n: 6, axis: "z", cols: [skin, pale] });
+      sph(head, r * 0.17, DARK, 0, -r * 0.24, r * 1.68);
+      for (const s of [-1, 1]) cone(head, r * 0.3, r * 0.9, dark, s * r * 0.72, r * 0.85, -r * 0.15, 3).rotation.z = -s * 0.45;
+    }
+    if (dragon) { // a wedge skull, an open lower jaw, heavy brows and a swept-back frill
+      const loft = (rings, cols) => T(head, rings.map(([z, x, y, oy]) => [z * r, x * r, y * r, 0, oy * r]), { n: 6, axis: "z", cols });
+      loft([[-0.9, 0.45, 0.45, 0.05], [-0.2, 0.9, 0.7, 0.05], [0.6, 0.74, 0.5, 0.06], [1.3, 0.44, 0.3, -0.06], [2.3, 0.36, 0.25, -0.1], [2.75, 0.14, 0.12, -0.16]], [dark, skin, skin, skin, skin]);
+      loft([[-0.3, 0.6, 0.26, -0.55], [0.9, 0.4, 0.18, -0.84], [2.3, 0.2, 0.11, -1.08]], [dark, pale]);
+      for (const s of [-1, 1]) {
+        sph(head, r * 0.09, DARK, s * r * 0.18, r * 0.1, r * 2.42);
+        if (c.mouth !== "none") for (let i = 0; i < 5; i++) {
+          const z = 0.85 + i * 0.4, x = s * r * (0.5 - i * 0.065);
+          cone(head, r * 0.08, r * (i === 3 ? 0.6 : 0.32), BONE, x, -r * 0.45, r * z, 3).rotation.x = Math.PI;
+          if (i < 4) cone(head, r * 0.07, r * 0.28, BONE, x * 0.85, -r * (0.56 + i * 0.075), r * (z + 0.15), 3);
+        }
+        rod(head, [s * r * 0.85, r * 0.55, -r * 0.35], [s * r * 0.42, r * 0.32, r * 1.2], r * 0.19, r * 0.05, dark);
+        for (const [y, len] of [[0.3, 1.7], [-0.05, 1.35], [-0.38, 1]]) rod(head, [s * r * 0.68, r * y, -r * 0.3], [s * r * 1.2, r * (y + 0.2), -r * (0.3 + len)], r * 0.17, 0.02, accent);
+      }
+      for (let i = 0; i < c.eyes; i++) { // narrow slit eyes along the sides; an odd one sits on the forehead
+        const middle = i === c.eyes - 1 && c.eyes % 2, s = middle ? 0 : i % 2 ? 1 : -1, row = Math.floor(i / 2), size = r * 0.27 * c.eyeSize * (row ? 0.7 : 1);
+        const eye = grp(head, s * r * (0.68 + row * 0.05), r * (middle ? 0.62 : 0.15 + row * 0.14), r * (middle ? 0.62 : 0.68 - row * 0.4)); eye.rotation.y = s * 0.4;
+        sph(eye, size, glow(c.glow), 0, 0, 0, 0.55, 0.55, 1.15, 8); sph(eye, size * 0.5, glow(DARK), middle ? 0 : s * size * 0.45, 0, size * 0.4, 0.4, 1.1, 0.4, 8);
+      }
     }
     if (kind === "bird") cone(head, r * 0.5, r * 1.4, "#e8a83a", 0, -r * 0.3, r * 1.35, 4).rotation.x = Math.PI / 2 + 0.2;
     F = { y: 0, z: 0, rx: r, ry: r, rz: r }; headTop = [0, r * 0.75, 0];
   }
   const faceZ = (x, y) => F.z + F.rz * Math.sqrt(Math.max(0.05, 1 - (x / F.rx) ** 2 - ((y - F.y) / F.ry) ** 2));
-  if (c.eyes) for (const [fx, fy, size] of eyeSpots(c.eyes)) {
+  if (c.eyes && !dragon) for (const [fx, fy, size] of eyeSpots(c.eyes)) {
     const muzzle = !ownHead && c.head !== "auto" && c.head !== "skull";
     const r = F.rx * 0.24 * size * c.eyeSize * (c.eyes > 5 ? 1.18 : 1) * (ownHead ? 1 : 1.05), x = fx * F.rx * 0.88, y = F.y + (fy + (muzzle ? 0.22 : 0)) * F.ry * 0.82;
     const eye = grp(head, x, y, faceZ(x, y) - r * 0.28); eye.rotation.set(-Math.max(0, fy) * 0.35, Math.asin(Math.max(-1, Math.min(1, x / F.rx))), 0);
     sph(eye, r, dark, 0, 0, 0, 1, 1, 0.6, 8); sph(eye, r * 0.82, glow(c.glow), 0, 0, r * 0.28, 1, 1, 0.55, 8);
     sph(eye, r * 0.48, glow(DARK), 0, 0, r * 0.6, 1, 1, 0.45, 8); sph(eye, r * 0.16, glow("#ffffff"), -r * 0.2, r * 0.22, r * 0.84, 1, 1, 0.6, 8);
   }
-  if (c.mouth !== "none") {
-    const snouted = !ownHead && (c.head === "beast" || c.head === "dragon"), long = c.head === "dragon" ? 1.35 : 1;
-    const y = F.y - F.ry * (snouted ? 0.55 : 0.5), z = snouted ? F.rz * 1.2 * long : faceZ(0, y), w = F.rx * (snouted ? 0.35 : 0.45);
+  if (c.mouth === "tentacles") { // a mind flayer's face: a beard of writhing feelers
+    const w = F.rx, y = dragon ? -w * 0.3 : F.y - F.ry * 0.4, z = dragon ? w * 2.1 : c.head === "beast" ? w * 1.4 : faceZ(0, y);
+    for (let i = 0; i < 8; i++) {
+      const u = (i - 3.5) / 3.5, len = w * (2.6 + (i * 5 % 3) * 0.65), at = [u * w * (dragon ? 0.45 : 0.6), y, z - Math.abs(u) * w * (dragon ? 1 : 0.4)];
+      const g = ownHead ? joint(model, "feeler", at[0], at[1] + lift, at[2], 1, i * 1.3) : joint(head, "feeler", ...at, 1, i * 1.3);
+      let from = [0, 0, 0];
+      for (let j = 1; j <= 5; j++) {
+        const t = j / 5, to = [u * w * 1.1 * t + Math.sin(t * 5 + i) * w * 0.2, -len * (t < 0.75 ? t : 1.5 - t), w * 0.8 * Math.sin(t * Math.PI * 0.9)];
+        rod(g, from, to, w * 0.21 * (1 - (j - 1) / 5.5), w * 0.21 * (1 - j / 5.5), j > 3 ? shade(accent, 0.3) : accent); from = to;
+      }
+    }
+  } else if (c.mouth !== "none" && !dragon) {
+    const snouted = !ownHead && c.head === "beast";
+    const y = F.y - F.ry * (snouted ? 0.55 : 0.5), z = snouted ? F.rz * 1.2 : faceZ(0, y), w = F.rx * (snouted ? 0.35 : 0.45);
     if (c.mouth === "smile") add(head, new THREE.TorusGeometry(w * 0.6, w * 0.09, 4, 8, Math.PI), DARK, 0, y + w * 0.2, z + 0.05).rotation.z = Math.PI;
     if (c.mouth === "beak") cone(head, w * 0.5, w, "#f0c46a", 0, y, z + w * 0.15, 4).rotation.x = Math.PI * 0.72;
     if (c.mouth === "fangs") { box(head, w * 1.3, w * 0.12, w * 0.2, DARK, 0, y, z); for (const s of [-1, 1]) cone(head, w * 0.17, w * 0.75, "#f8f2e2", s * w * 0.45, y - w * 0.38, z + 0.05, 3).rotation.x = Math.PI; }
@@ -93,7 +130,7 @@ export function buildCreature(c, kit) {
   }
   if (c.horns !== "none") {
     const [, ty, tz] = headTop, r = F.rx * (ownHead ? 0.7 : 0.75), s0 = F.rx / 2.4;
-    if (c.horns === "horns") for (const s of [-1, 1]) { const g = grp(head, s * r * 0.8, ty, tz); g.rotation.z = -s * 0.6; cone(g, 0.55 * s0, 2.2 * s0, BONE, 0, s0, 0, 5); const tip = grp(g, 0, 1.9 * s0, 0); tip.rotation.x = -0.7; cone(tip, 0.3 * s0, 1.4 * s0, shade(BONE, -0.12), 0, 0.6 * s0, 0, 5); }
+    if (c.horns === "horns") for (const s of [-1, 1]) { const g = grp(head, s * r * 0.8, ty, tz); g.rotation.set(dragon ? -0.9 : 0, 0, -s * 0.6); cone(g, 0.55 * s0, 2.2 * s0, BONE, 0, s0, 0, 5); const tip = grp(g, 0, 1.9 * s0, 0); tip.rotation.x = -0.7; cone(tip, 0.3 * s0, 1.4 * s0, shade(BONE, -0.12), 0, 0.6 * s0, 0, 5); }
     if (c.horns === "antlers") for (const s of [-1, 1]) { const g = grp(head, s * r * 0.7, ty, tz); g.rotation.z = -s * 0.5; rod(g, [0, 0, 0], [0, 3.6 * s0, 0], 0.28 * s0, 0.14 * s0, BONE); for (const [h, side] of [[1.4, 1], [2.4, -1], [3.2, 1]]) rod(g, [0, h * s0, 0], [side * s * 1.2 * s0, (h + 1.1) * s0, 0], 0.18 * s0, 0.05, shade(BONE, -0.08)); }
     if (c.horns === "spikes") for (let i = -2; i <= 2; i++) cone(head, 0.4 * s0, (2 - Math.abs(i) * 0.35) * s0, accent, i * r * 0.42, ty + 0.5 * s0 - Math.abs(i) * 0.25 * s0, tz, 4).rotation.z = -i * 0.3;
     if (c.horns === "crown") { const cr = r * 0.75, y = ty + 0.25 * s0; add(head, new THREE.CylinderGeometry(cr, cr * 1.05, 0.7 * s0, 8, 1, true), { metal: GOLD, dbl: 1 }, 0, y, tz); for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2; cone(head, 0.22 * s0, 0.8 * s0, MM(GOLD), Math.cos(a) * cr, y + 0.7 * s0, tz + Math.sin(a) * cr, 3); } sph(head, 0.22 * s0, glow(c.glow), 0, y, tz + cr); }
@@ -105,9 +142,15 @@ export function buildCreature(c, kit) {
   if (c.back === "batwings" || c.back === "featherwings") for (const s of [-1, 1]) {
     const [y, z] = B.back[2], wing = joint(model, "wing", s * B.rx * 0.45, lift + y, c.body === "beast" ? 0.6 : c.body === "bug" ? -0.5 : z + 0.4, s);
     const span = Math.max(0.8, B.rx / 3);
-    if (c.back === "batwings") {
-      rod(wing, [0, 0, 0], [s * 7 * span, 3.6 * span, -1.4], 0.35, 0.14, dark);
-      [[2, 4.6], [4.2, 5], [6.4, 3.9]].forEach(([x, l], i) => { const m = cone(wing, 1.7 * span, l * span, accent, s * x * span, (x * 0.51 - l / 2) * span, -0.4 - i * 0.35, 3); m.rotation.z = Math.PI + s * 0.12 * i; m.scale.z = 0.1; });
+    if (c.back === "batwings") { // one scalloped membrane stretched over the finger bones
+      const p = (x, y, z) => [s * x * span, y * span, z];
+      const root = p(0, 0, 0), elbow = p(3.2, 3.6, -0.7), wrist = p(6, 5.4, -1.2), tips = [p(11, 2.6, -2.6), p(8.2, -1.2, -2.2), p(4.6, -2.4, -1.5)];
+      const edge = [wrist, tips[0], p(8, 1.5, -2), tips[1], p(5.6, 0.1, -1.6), tips[2], p(2.2, -0.9, -0.9), p(0.3, -2.2, -0.3), root];
+      const skinOf = new THREE.BufferGeometry();
+      skinOf.setAttribute("position", new THREE.Float32BufferAttribute(edge.slice(1).flatMap((q, i) => [...elbow, ...edge[i], ...q]), 3));
+      add(wing, skinOf, accent);
+      rod(wing, root, elbow, 0.55, 0.4, dark); rod(wing, elbow, wrist, 0.4, 0.28, dark); rod(wing, wrist, p(6.5, 7, -1), 0.22, 0.02, BONE);
+      for (const tip of tips) rod(wing, wrist, tip, 0.24, 0.05, dark);
     } else {
       rod(wing, [0, 0, 0], [s * 6.4 * span, 3 * span, -1.2], 0.45, 0.2, pale);
       [1, 0.9, 0.76, 0.6, 0.44].forEach((l, i) => { const h = 6.5 * l * span, a = 0.3 + 0.09 * i, x = (1.2 + i * 1.2) * span, f = cone(wing, 0.9 * span, h, i % 2 ? pale : shade(skin, 0.5), s * (x + Math.sin(a) * h / 2), x * 0.47 - Math.cos(a) * h / 2, -0.25 - x * 0.18, 4); f.rotation.z = Math.PI + s * a; f.scale.z = 0.16; });
@@ -193,6 +236,7 @@ export function moveCreature(limbs, name, t) {
     if (kind === "tentacle") x = Math.sin(t * (walk || name === "attack" ? 11 : still ? 1.4 : 6) + phase) * (walk ? 0.38 : still ? 0.06 : 0.22) - (up || name === "attack" ? 0.55 : 0);
     if (kind === "leg") x = walk ? Math.sin(t * 11 + phase) * 0.45 : name === "dance" ? Math.sin(t * 8 + phase) * 0.35 : 0;
     if (kind === "arm") x = name === "attack" ? -1.2 * strike : up ? -1.3 : name === "wave" && side < 0 ? -1.3 + Math.sin(t * 9) * 0.35 : name === "point" && side < 0 ? -1.2 : walk ? Math.sin(t * 9 + side) * 0.35 : Math.sin(t * 6 + side) * 0.12;
+    if (kind === "feeler") x = Math.sin(t * (still ? 1.4 : 4) + phase) * (still ? 0.05 : 0.15) - (name === "attack" ? 0.5 : 0);
     if (kind === "wing") z = still ? -side * 0.35 : side * Math.sin(t * (walk ? 11 : 8)) * 0.45;
     if (kind === "tail") y = Math.sin(t * (walk ? 9 : still ? 1.4 : 5)) * (still ? 0.08 : 0.35);
     if (kind === "head") { x = name === "attack" ? 0.45 * strike : name === "yes" ? Math.sin(t * 13) * 0.35 : name === "hurt" ? -0.35 : still ? 0.35 : up ? -0.35 : 0; y = name === "no" ? Math.sin(t * 13) * 0.6 : 0; }

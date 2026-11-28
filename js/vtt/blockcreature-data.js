@@ -2,7 +2,7 @@
 export const MONSTER_PARTS = { // the first choice is the default
   body: ["blob", "orb", "squid", "beast", "brute", "serpent", "bug"],
   head: ["auto", "beast", "dragon", "skull", "bird"],
-  mouth: ["none", "smile", "fangs", "beak", "maw"],
+  mouth: ["none", "smile", "fangs", "beak", "maw", "tentacles"],
   limbs: ["none", "legs", "spider", "tentacles"],
   arms: ["none", "claws", "pincers", "tentacles"],
   horns: ["none", "horns", "antlers", "spikes", "crown"],
@@ -26,6 +26,7 @@ export const PRESETS = {
   "Dire wolf": { body: "beast", head: "beast", mouth: "fangs", limbs: "legs", count: 4, back: "spines", tail: "tail", skin: "#4a4650", accent: "#8a8490", glow: "#ff5a3a" },
   "Giant spider": { body: "bug", mouth: "fangs", limbs: "spider", count: 8, eyes: 8, markings: "stripes", skin: "#2a2430", accent: "#b8343a", glow: "#ff3a3a" },
   Wyrmling: { body: "beast", head: "dragon", mouth: "fangs", limbs: "legs", count: 4, horns: "horns", back: "batwings", tail: "spiked", skin: "#a8342a", accent: "#e8b04a", glow: "#ffd23f" },
+  "Illithid dragon": { body: "beast", head: "dragon", mouth: "tentacles", limbs: "legs", count: 4, arms: "none", horns: "horns", back: "batwings", tail: "spiked", markings: "runes", aura: "yes", bulk: 1.4, limbLen: 1.1, size: 1.6, skin: "#2c2438", accent: "#7a3a96", glow: "#00ffd5" },
   Serpent: { body: "serpent", head: "dragon", mouth: "fangs", back: "spines", markings: "stripes", size: 1.2, skin: "#2e7d6f", accent: "#d9c86a", glow: "#e8ff5a" },
   Ogre: { body: "brute", mouth: "fangs", limbs: "legs", count: 2, arms: "claws", horns: "horns", size: 1.4, bulk: 1.2, skin: "#7a8a5a", accent: "#5a4630", glow: "#ffb347" },
 };

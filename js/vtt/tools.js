@@ -318,7 +318,8 @@ function placeToken(c) {
   const used = new Set(Object.entries(S.tokens).map(([id, t]) => t.label || id));
   const label = name || [..."ABCDEFGHIJKLMNOPQRSTUVWXYZ"].find((l) => !used.has(l)) || "?";
   if (kind && ref) rememberToken(`${kind}:${ref}`);
-  put(`tokens/${uid("t")}`, { x: c.x, y: c.y, lv: S.level ?? 0, label, ...(npc ? { npc } : {}), ...(pc ? { pc } : {}), ...(color ? { color } : {}), ...(img ? { img } : {}), ...(hp > 0 ? { hp: pc && cur != null ? Math.min(cur, hp) : hp, max: hp } : {}) });
+  // new non-player tokens start hidden; the GM reveals them from the right-click menu
+  put(`tokens/${uid("t")}`, { x: c.x, y: c.y, lv: S.level ?? 0, label, ...(pc ? {} : { hidden: true }), ...(npc ? { npc } : {}), ...(pc ? { pc } : {}), ...(color ? { color } : {}), ...(img ? { img } : {}), ...(hp > 0 ? { hp: pc && cur != null ? Math.min(cur, hp) : hp, max: hp } : {}) });
 }
 function placeObject(kind, p, set = {}) {
   const snap = snapFor(kind, p), n = Object.values(S.objects).filter((o) => o.kind === kind).length + 1;

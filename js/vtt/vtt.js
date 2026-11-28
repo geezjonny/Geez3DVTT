@@ -168,6 +168,7 @@ function pickSpot(p) {   // the cell a trigger rule is waiting for
 function toggleSelected(id) { S.selected.has(id) ? S.selected.delete(id) : S.selected.add(id); S.lastSel = id; drawObjects(); renderPanel(true); }
 map.addEventListener("pointerdown", (e) => {
   if (S.pick?.zone === "link") { if (e.button === 0) connectTo(e, e.target.closest(".obj, .prop, .wall")?.dataset.id || wallAt(mapPoint(e))); return; }
+  if (S.pick?.zone === "patrol") { if (e.button === 0) patrolPoint(mapPoint(e)); return; }
   if (e.button !== 0 || (!S.isGM && S.paused)) return;   // only the left button draws, drags or uses; right-click is the menu
   const { objects, tokens } = S;
   const p = mapPoint(e), objEl = e.target.closest(".obj"), tokEl = e.target.closest(".token");
@@ -216,7 +217,7 @@ const release = (e) => {
 let tokMenu = null;
 const closeTokMenu = () => { tokMenu?.remove(); tokMenu = null; };
 document.addEventListener("pointerdown", (e) => { if (tokMenu && !tokMenu.contains(e.target)) closeTokMenu(); }, true);   // capture: map panning stops the event before it bubbles
-document.addEventListener("keydown", (e) => { if (e.key !== "Escape") return; closeTokMenu(); if (S.pick?.zone === "link") { S.pick = null; map.classList.remove("picking"); } });
+document.addEventListener("keydown", (e) => { if (e.key !== "Escape") return; closeTokMenu(); if (S.pick?.zone === "link") { S.pick = null; map.classList.remove("picking"); } endPatrol(); });
 const SHEET_URL = "https://geezjonny.github.io/GeezSheets/companion.html";   // GeezSheets (sheet.html?char=<pc id>); change if hosted elsewhere
 let pcs = null;   // player characters from the main app (read only): [{ id, name }]
 function loadPcs() {   // the pending read is shared; a failed or empty read is not kept, so the next call reads again
@@ -311,10 +312,10 @@ async function buildTokenMenu(menu, id, done, alive) {
   if (S.isGM && !t.pc) {   // the guard tag: used while stealth mode is on
     const act = (text, changes) => { const b = document.createElement("button"); b.textContent = text; b.addEventListener("click", () => { done(); patch(Object.fromEntries(Object.entries(changes).map(([k, v]) => [`tokens/${id}/${k}`, v]))); }); menu.append(b); };
     act(t.guard ? "Remove guard tag" : "Tag as guard", t.guard ? { guard: null, mood: null, ...(t.spotted ? { spotted: null, frozen: null } : {}) } : { guard: true });
+    const pr = document.createElement("button"); pr.textContent = "Draw patrol route"; pr.addEventListener("click", () => { done(); startPatrol(id); }); menu.append(pr);
     if (t.guard) {
       const route = Object.values(t.patrol || {});
       for (const [text, turn] of [["Turn guard left", -45], ["Turn guard right", 45]]) act(text, { face: ((t.face ?? FACE) + turn + 360) % 360 });
-      act(`Add patrol point here (${route.length})`, { patrol: [...route, [t.x, t.y]] });
       if (route.length) act("Clear patrol", { patrol: null });
       act(t.sweep ? "Stop sweeping" : "Sweep side to side", { sweep: t.sweep ? null : true });
     }
@@ -388,6 +389,7 @@ async function buildTokenMenu(menu, id, done, alive) {
   if (pc && alive()) viewSheet();
 }
 map.addEventListener("contextmenu", (e) => {
+  if (S.pick?.zone === "patrol") { e.preventDefault(); return endPatrol(); }
   const tokEl = e.target.closest(".token");
   if (tokEl) { e.preventDefault(); return showTokenMenu(e, tokEl.dataset.id); }
   closeTokMenu();
@@ -417,6 +419,24 @@ function groundMenu(e, p) {
   const fl = floorAt(p);
   if (fl) { e.preventDefault(); showActionMenu(e, "Floor", [["Replace all like this...", () => openReplace({ category: "floor", from: S.map.floors[fl]?.mat || "" })], ["Delete", () => put(`map/floors/${fl}`, null)]], settingsFor("floor", fl).fields); }
 }
+// ---- guard patrol: click the spots a guard walks between; right-click, Enter or Esc finishes ----
+function startPatrol(id) {
+  const t = S.tokens[id]; if (!t) return;
+  setTool(null); S.pick = { zone: "patrol", id, route: [[t.x, t.y]] }; map.classList.add("picking");   // the route starts where the guard stands
+  patch({ [`tokens/${id}/guard`]: true, [`tokens/${id}/patrol`]: S.pick.route });
+  toast(`Click each spot ${t.label || "the guard"} walks to. Right-click when done.`);
+}
+function patrolPoint(p) {
+  if (!p || !S.tokens[S.pick.id]) return;
+  const c = cellOf(p); S.pick.route = [...S.pick.route, [c.x, c.y]];
+  put(`tokens/${S.pick.id}/patrol`, S.pick.route); toast(`Spot ${S.pick.route.length - 1} added. Right-click when done.`);
+}
+function endPatrol() {
+  if (S.pick?.zone !== "patrol") return;
+  const spots = S.pick.route.length - 1; S.pick = null; map.classList.remove("picking");
+  toast(!spots ? "No patrol spots added: the guard stays put." : S.stealth ? "Patrol set." : "Patrol set. Turn Stealth on and the guard walks it.");
+}
+document.addEventListener("keydown", (e) => { if (e.key === "Enter") endPatrol(); });
 // Token animations and attack effects everyone sees: acts/<token id> = the latest one.
 const sendAct = (id, what) => rawPut(`acts/${id}`, { ...what, n: Date.now() + Math.random() }).catch((err) => console.warn("animation not shared", err));   // not part of undo
 {
@@ -640,6 +660,7 @@ function useObject(id) {
   document.addEventListener("pointerup", (e) => {
     const d = down; down = null;
     if (!d || !S.v3d || Math.hypot(e.clientX - d.x, e.clientY - d.y) > 5 || S.v3d.controlsBlocked()) return;
+    if (S.pick?.zone === "patrol") { if (d.button === 0) patrolPoint(S.v3d.groundAt(e.clientX, e.clientY)); else if (d.button === 2) endPatrol(); return; }
     if (d.button === 0 && S.pick?.zone === "link") return connectTo(e, S.v3d.peekAt(e.clientX, e.clientY)?.id);   // objects, props and walls
     if (d.button === 0 && (S.tool || S.placing)) return;   // building: that click drew something
     if (d.button === 0 && S.puzzleMode) {   // traps and triggers in the angled view: the same clicks the flat layer takes

@@ -94,8 +94,7 @@ async function mayRoll(tid) {
 }
 
 // ---- state --------------------------------------------------------------------------------
-let current = null, callWin, setupWin, ready = false, seen = new Set(), opt = { mode: null, extras: {}, other: 0, bardicDie: 6 }, optFor = null, mine = [];
-const pageLoadedAt = Date.now();
+let current = null, callWin, setupWin, ready = false, opt = { mode: null, extras: {}, other: 0, bardicDie: 6 }, optFor = null, mine = [];
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
 const STYLE = `#win-rollcall-call .fwin-body,#win-rollcall-setup .fwin-body{min-width:270px;max-width:340px}
@@ -286,9 +285,7 @@ export function initRollCall() {
   watch("rollcall/current", (value) => {
     const first = !ready; ready = true; current = value || null; followCompanions(current);
     if (!value?.open) { callWin.hide(); return; }
-    const fresh = !seen.has(value.id) && (value.t || 0) > pageLoadedAt - 15000 && Date.now() - (value.t || 0) < 60000;
-    if (first || fresh) { const wasSeen = seen.has(value.id); seen.add(value.id); if (!fresh && wasSeen) return; }
-    render().then(() => { if (!fresh && first && callWin.visible()) return; });
-    if (!fresh) callWin.hide();   // an old call found on page load: stays closed until opened from the bar
+    const stale = first && Date.now() - (value.t || 0) > 60000;   // an old call found on page load: stays closed until opened from the bar
+    render().then(() => { if (stale) callWin.hide(); });   // new results never close the window
   });
 }

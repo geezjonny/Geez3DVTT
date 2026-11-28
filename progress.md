@@ -1,5 +1,26 @@
 # Progress
 
+## 2026-11-28
+
+### Done (fixes after the first session)
+- **Dragon minis:** long neck, wedge head with open jaw and slit eyes, frill, one-piece bat wings; new **Tentacles**
+  mouth and **Illithid dragon** preset. Checked as test renders.
+- **Roll call:** stays open after the last result.
+- **Guard routes:** right-click an NPC > **Draw patrol route**, click spots, right-click, Enter or Esc to finish.
+- **New tokens** without a player character start hidden.
+- **Skill rolls (GeezSheets):** `sheet.html` now sends rolls to the board; both sheet pages warn when a send fails.
+- Token sizes checked: Medium to Gargantuan are 1 to 4 squares, as in D&D.
+
+### Where it stands
+- Tests pass. A `companion.html` skill roll showed on the live GM board (two tabs on one computer).
+- Why players' rolls did not show in the session is unknown; only one reached the database that night.
+
+### Left to do
+- Next session: each player rolls one skill while the GM watches; note the page address of any that fails.
+- Set Zersayth to **Mouth > Tentacles** in the creator and reapply it with **3D mini...**.
+- Try on real devices: `sheet.html` rolls, patrol routes on the castle map, hidden NPCs.
+- Hidden guards can still spot players. Large and Gargantuan tokens sit half a square off the grid lines.
+
 ## 2026-11-27
 
 ### Done
