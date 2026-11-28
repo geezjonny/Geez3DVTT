@@ -22,6 +22,13 @@
   hostiles or Fighter/Ranger/Cleric/Bard heroes; players pick one, move with arrows, type words to attack and use a
   Space-bar skill gauge. Synced under `geez3d/minigame`; the GM page runs the hostiles, so keep it open. A five-screen
   headless test passed; real keyboards, separate computers, reset and late joining are untried.
+- **Minigame, later changes:** each enemy has its own word overhead; a d20 per hero at Start sets word length and gauge
+  timing; waves spawn as pixel guards, pixel zombies or any `token/` picture chosen by the GM.
+- **Sneak and escape:** new `minigame2.html` (own table, `geez3d/minigame2`). GM sets map size, drags rectangular rooms,
+  puts doors into walls, wires levers to doors, marks exits, places heroes, guards (two-click patrol with a vision cone)
+  and zombies (follow the closest sound). Everyone must escape. Both pages share `js/minigame*.js` and `js/minigame.css`.
+- Headless tests passed for both pages. Left: try hand drawing, real keyboards, separate computers and several players on
+  `minigame2.html`. There is no quiet-walk key.
 
 ### Where it stands
 - Everything is on `main`, the only branch, and live on the GitHub Pages site. Every push updates the live table.

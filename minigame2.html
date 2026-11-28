@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Geez Minigame Maps</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="js/minigame.css">
+<script src="js/firebase-config.js"></script>
+</head>
+<body>
+<main>
+  <div id="status" role="status">Connecting…</div>
+  <div id="pick" hidden></div>
+  <canvas id="c" width="640" height="400" aria-label="Minigame arena"></canvas>
+  <div id="gauge" aria-label="Skill gauge"><i></i><u></u></div>
+  <div id="help"></div>
+</main>
+<aside id="side" hidden>
+  <button id="run" type="button">Start</button>
+  <button id="reset" type="button">Reset fight</button>
+  <button id="clear" type="button">Clear</button>
+  <p>Map size (squares): <input id="cols" type="number" min="10" max="48" value="20" aria-label="Map width"> × <input id="rows" type="number" min="8" max="32" value="12" aria-label="Map height"> <button id="resize" type="button">Resize</button></p>
+  <p><label>Draw: <select id="tool"><option value="">Nothing</option><option value="wall">Room (drag)</option><option value="door">Door</option><option value="lever">Lever</option><option value="exit">Exit</option><option value="guard">Guard (two clicks)</option><option value="zombie">Zombie</option><option value="erase">Erase</option></select></label></p>
+  <p id="hint" role="status"></p>
+  <p>Bring heroes in from the table:</p>
+  <div id="list"></div>
+</aside>
+<script type="module" src="js/minigame.js"></script>
+</body>
+</html>

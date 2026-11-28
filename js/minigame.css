@@ -1,0 +1,15 @@
+body { margin: 0; background: #14121a; color: #eee; font: 15px monospace; display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; padding: 12px 16px; }
+main { width: min(960px, 100%); text-align: center; }
+canvas { width: 100%; image-rendering: pixelated; border: 3px solid #4a4560; background: #26303a; touch-action: none; }
+button, select { font: inherit; background: #332e45; color: #fff; border: 2px solid #6b6390; padding: 4px 10px; cursor: pointer; }
+#gauge { position: relative; height: 22px; margin: 6px auto; width: 70%; background: #3a2730; border: 2px solid #888; visibility: hidden; }
+#gauge i, #gauge u { position: absolute; top: 0; bottom: 0; }
+#gauge i { background: #2fbf4a; }
+#gauge u { width: 5px; margin-left: -2px; background: #fff; }
+#side { width: 290px; text-align: left; }
+#side label { display: flex; justify-content: space-between; gap: 8px; margin: 4px 0; }
+#list { max-height: 70vh; overflow: auto; }
+#pick button { margin: 6px; font-size: 18px; }
+[hidden] { display: none !important; }
+#side input[type=number] { width: 4.5em; font: inherit; }
+#tool { min-width: 8em; }
