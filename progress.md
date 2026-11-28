@@ -18,6 +18,10 @@
 - Castle scene saved in `scene/` as "Battle at Castle Alaris": more props, and minis on 7 tokens.
 - **Stealth:** GM can right-click a character and pick **Neutral to guards**; no guard sees or hears them until switched
   back. Tests pass (83); not yet tried in a live browser.
+- **Minigame:** new `minigame.html` (GM adds `?gm=jonny`, a link and not a password). GM brings table tokens in as
+  hostiles or Fighter/Ranger/Cleric/Bard heroes; players pick one, move with arrows, type words to attack and use a
+  Space-bar skill gauge. Synced under `geez3d/minigame`; the GM page runs the hostiles, so keep it open. A five-screen
+  headless test passed; real keyboards, separate computers, reset and late joining are untried.
 
 ### Where it stands
 - Everything is on `main`, the only branch, and live on the GitHub Pages site. Every push updates the live table.
