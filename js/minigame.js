@@ -1,6 +1,6 @@
 import { guard, zombie, drawCone, WALKING, LOUD } from "./minigame-ai.js";
 import { MAPPED, CELL, blocked, sight, clearWalk, nextStep, centerOf, cellAt, freeSpot, nearLever, flip, drawMap, initEditor } from "./minigame-map.js";
-import { watch, put, patch } from "./store.js";
+import { watch, put, patch, readAt } from "./store.js";
 
 const GM = new URLSearchParams(location.search).get("gm") === "jonny";   // a link, not a password
 const NS = MAPPED ? "minigame2" : "minigame";   // each page has its own fight
@@ -41,7 +41,8 @@ watch(`${NS}/fx`, (v) => {
 });
 
 if (MAPPED) watch(`${NS}/map`, (v) => {
-  map = { cols: 20, rows: 12, ...v, cells: v?.cells || {}, spawns: v?.spawns || {}, starts: v?.starts || {} };
+  map = { cols: 20, rows: 12, dc: 12, ...v, cells: v?.cells || {}, spawns: v?.spawns || {}, starts: v?.starts || {} };
+  if ($("dc") && document.activeElement !== $("dc")) $("dc").value = map.dc;
   W = $("c").width = map.cols * CELL; H = $("c").height = map.rows * CELL;
   $("c").style.width = `min(100%, ${80 * W / H}vh)`;
 });
@@ -125,10 +126,14 @@ const tier = () => tierOf(heroes[me]?.roll);
 function zone() { const w = tier().zone; return line ? [0.48 - w / 2, 0.52 + w / 2] : [0.75 - w / 2, 0.75 + w / 2]; }
 const tri = (t) => 1 - Math.abs((t % 2) - 1);   // 0 → 1 → 0
 const marker = () => tri((line || charge).t * (tier().speed + (line ? 0.2 : 0)));
-const canAct = () => me && inPlay(heroes[me]) && heroes[me].roll > 0 && running;
+const canAct = () => me && inPlay(heroes[me]) && !heroes[me].caught && heroes[me].roll > 0 && running;
 addEventListener("keydown", (e) => {
   if (GM || !me || e.ctrlKey || e.metaKey || e.altKey) return;
   if (e.key.startsWith("Arrow")) { e.preventDefault(); held.add(e.key); return; }
+  if (heroes[me]?.caught) {   // one Stealth check: Space rolls it
+    if (e.code === "Space") { e.preventDefault(); if (!e.repeat && running) act("stealth"); }
+    return;
+  }
   if (e.key === "Enter") {
     e.preventDefault(); const lever = nearLever(cells(), my);
     if (!e.repeat && lever && inPlay(heroes[me])) act("lever", lever);
@@ -163,7 +168,8 @@ function playerStep(dt) {
   cooldown -= dt;
   if (charge) charge.t += dt;
   if (line) { line.t += dt; line.left -= dt; if (line.left <= 0 || h.hp <= 0 || !running) { line = null; cooldown = 3; } }
-  if (inPlay(h) && !line) {
+  if (h.caught) { charge = line = null; dirty = false; }
+  if (inPlay(h) && !h.caught && !line) {
     const dx = held.has("ArrowRight") - held.has("ArrowLeft"), dy = held.has("ArrowDown") - held.has("ArrowUp");
     if (dx || dy) {
       const n = Math.hypot(dx, dy);
@@ -195,11 +201,12 @@ if (GM) {
   const reset = () => {
     for (const [key, cell] of Object.entries(cells())) if (cell.open || cell.on) patch({ [`${NS}/map/cells/${key}/open`]: null, [`${NS}/map/cells/${key}/on`]: null });
     const c = { [`${NS}/running`]: null, [`${NS}/respawn`]: { n: Date.now(), at: Object.fromEntries(Object.keys(heroes).map((id, i) => [id, heroSpot(id, i)])) } };
-    Object.keys(heroes).forEach((id, i) => { Object.assign(c, { [`${NS}/heroes/${id}/hp`]: HERO_HP, [`${NS}/heroes/${id}/cloak`]: 0, [`${NS}/heroes/${id}/line`]: 0, [`${NS}/heroes/${id}/roll`]: 0, [`${NS}/heroes/${id}/out`]: false, [`${NS}/pos/${id}`]: heroSpot(id, i) }); });
+    Object.keys(heroes).forEach((id, i) => { Object.assign(c, { [`${NS}/heroes/${id}/hp`]: HERO_HP, [`${NS}/heroes/${id}/cloak`]: 0, [`${NS}/heroes/${id}/line`]: 0, [`${NS}/heroes/${id}/roll`]: 0, [`${NS}/heroes/${id}/out`]: false, [`${NS}/heroes/${id}/caught`]: "", [`${NS}/pos/${id}`]: heroSpot(id, i) }); });
     Object.assign(c, { [`${NS}/foes`]: null, [`${NS}/wave`]: null }); nextAt = 0;
     patch(c);
   };
   $("reset").onclick = reset;
+  if ($("dc")) $("dc").onchange = () => { put(`${NS}/map/dc`, Math.max(1, Math.min(30, Number($("dc").value) || 12))); $("dc").blur(); };
   if (MAPPED) initEditor({ NS, canvas: $("c"), map: () => map, patch, reset, occupants: Object.assign(() => [...Object.keys(heroes).filter((id) => !heroes[id].out).map((id) => pos[id]), ...Object.values(foes).filter((f) => f.hp > 0)].filter(Boolean), { foe: (id) => (foes[id]?.hp > 0 ? foes[id] : null), foes: () => Object.values(foes).filter((f) => f.hp > 0) }) });
   // a worker's timer keeps ticking when the GM looks at another tab
   const clock = new Worker(URL.createObjectURL(new Blob(["setInterval(() => postMessage(0), 100)"], { type: "text/javascript" })));
@@ -219,7 +226,12 @@ function drawList() {
     for (const [value, text] of [["", "—"], ...Object.keys(CLASSES).map((c) => [c, "Hero: " + c]), ]) pick.add(new Option(text, value));
     pick.value = heroes[id]?.cls || "";
     pick.onchange = () => { bring(id, t, pick.value); pick.blur(); drawList(); };
-    row.append(t.label || id, pick); return row;
+    row.append(t.label || id, pick);
+    if (!MAPPED || !heroes[id]) return row;
+    const sneak = document.createElement("label"), mod = document.createElement("input");
+    Object.assign(mod, { type: "number", value: heroes[id].stealth ?? 0, onchange: () => { put(`${NS}/heroes/${id}/stealth`, Number(mod.value) || 0); mod.blur(); } });
+    sneak.append("↳ Stealth modifier", mod);
+    const both = document.createElement("div"); both.append(row, sneak); return both;
   }));
 }
 function bring(id, t, as) {
@@ -227,12 +239,40 @@ function bring(id, t, as) {
   const name = t.label || "Creature";
   if (as) {
     const m = t.mini || {};
-    c[`${NS}/heroes/${id}`] = { name, cls: as, out: false, roll: 0, hp: HERO_HP, cloak: 0, line: 0, skin: m.skin || "#f1c7a5", hair: m.hairC || "#5a3a22", top: m.top || { fighter: "#7a7f8c", ranger: "#3f6b3a", cleric: "#d8d0b4", bard: "#7a2f5a" }[as], bot: m.bot || "#4a4030", trim: m.trim || "#f2c94c" };
+    c[`${NS}/heroes/${id}`] = { name, cls: as, out: false, caught: "", roll: 0, hp: HERO_HP, cloak: 0, line: 0, skin: m.skin || "#f1c7a5", hair: m.hairC || "#5a3a22", top: m.top || { fighter: "#7a7f8c", ranger: "#3f6b3a", cleric: "#d8d0b4", bard: "#7a2f5a" }[as], bot: m.bot || "#4a4030", trim: m.trim || "#f2c94c" };
     c[`${NS}/pos/${id}`] = heroSpot(id, Object.keys(heroes).length);
   }
   patch(c);
 }
 const hitAt = new Map(), brains = new Map(), wasAt = new Map(), noises = [];
+const caughtAt = new Map(), asked = new Set(), looked = new Set();
+async function loadStealth(id) {   // same sum as the sheet's Stealth skill (callMod in vtt/rollcall.js, which needs the whole table)
+  looked.add(id); document.documentElement.dataset.role = "gm";
+  try {
+    const sheet = tokens[id].pc && await readAt(`characters/pcs/${tokens[id].pc}`), skill = sheet?.skills?.stealth || {};
+    const dex = Number(sheet?.stats?.dex ?? sheet?.abilities?.dex?.score ?? 10) || 10, prof = Number(sheet?.combat?.proficiency_bonus) || 2;
+    const mod = skill.bonus != null && skill.bonus !== "" ? Number(skill.bonus) || 0 : Math.floor((dex - 10) / 2) + (skill.proficient ? prof : 0) + (skill.expertise ? prof : 0);
+    if (heroes[id] && heroes[id].stealth == null) put(`${NS}/heroes/${id}/stealth`, mod);
+  } catch (err) { console.warn("Could not read the sheet; type the Stealth modifier by hand.", err); }
+}
+// A caught hero gets one check: pass and that enemy ignores them for 3 seconds, fail and they go back to the start.
+function checks(c, h) {
+  const now = Date.now(), sent = new Set(), back = {};
+  for (const [i, [id, hero]] of Object.entries(h).entries()) {
+    if (!hero.caught) { asked.delete(id); continue; }
+    const brain = brains.get(hero.caught);
+    if (!(foes[hero.caught]?.hp > 0)) { hero.caught = ""; continue; }
+    if (!caughtAt.has(id)) caughtAt.set(id, now);
+    if (!asked.has(id) && now - caughtAt.get(id) < 8000) continue;   // nobody pressed: roll anyway
+    const d = 1 + (Math.random() * 20 | 0), mod = Number(hero.stealth) || 0, total = d + mod, pass = total >= map.dc;
+    hero.check = `d20 ${d} ${mod < 0 ? "-" : "+"} ${Math.abs(mod)} = ${total} vs ${map.dc}: ${pass ? "slipped away" : "back to start"}`; hero.checkN = now;
+    if (brain) Object.assign(brain, { ignore: { ...brain.ignore, [id]: now + 3000 }, last: null, goal: null, look: 0 });
+    if (!pass) { back[id] = heroSpot(id, i); c[`${NS}/pos/${id}`] = back[id]; wasAt.delete(id); sent.add(id); }
+    hero.caught = ""; asked.delete(id); caughtAt.delete(id);
+  }
+  if (sent.size) c[`${NS}/respawn`] = { n: now, at: back };
+  return sent;
+}
 // minigame2: guards and zombies come from where the GM placed them, and act on what they see and hear
 function placed(c, f, h, dt) {
   const spawns = map.spawns || {};
@@ -245,17 +285,21 @@ function placed(c, f, h, dt) {
   // footsteps: whoever moved since the last tick
   const sounds = noises.splice(0), walkers = [...Object.keys(h).filter((k) => inPlay(h[k]) && !(h[k].cloak > 0) && pos[k]).map((k) => [k, pos[k]]), ...Object.entries(f).filter(([, x]) => x.hp > 0 && x.kind === "guard")];
   for (const [id, p] of walkers) { const was = wasAt.get(id); if (was && dist(was, p) > 1) sounds.push({ x: p.x, y: p.y, range: WALKING, by: id }); wasAt.set(id, { x: p.x, y: p.y }); }
+  for (const id of Object.keys(h)) if (h[id].stealth == null && tokens[id] && !looked.has(id)) loadStealth(id);
   if (!running || Date.now() < goAt) return;
-  for (const [id, hero] of Object.entries(h)) if (inPlay(hero) && pos[id] && cellAt(map.cells, pos[id])?.t === "exit") hero.out = true;
-  const world = { map, dt, sounds, reach: GAP + 4, move, heroes: Object.entries(h).filter(([k, v]) => inPlay(v) && pos[k]).map(([id, v]) => ({ id, x: pos[id].x, y: pos[id].y, tank: v.line > 0, cloaked: v.cloak > 0 })) };
+  const sent = checks(c, h);
+  for (const [id, hero] of Object.entries(h)) if (inPlay(hero) && !hero.caught && !sent.has(id) && pos[id] && cellAt(map.cells, pos[id])?.t === "exit") hero.out = true;
+  const world = { map, dt, sounds, reach: GAP + 4, move, heroes: Object.entries(h).filter(([k, v]) => inPlay(v) && !sent.has(k) && pos[k]).map(([id, v]) => ({ id, x: pos[id].x, y: pos[id].y, tank: v.line > 0, cloaked: v.cloak > 0 })) };
   for (const [id, foe] of Object.entries(f)) {
     if (foe.hp <= 0 || !spawns[id]) continue;
     if (foe.hold > 0) { foe.hold = Math.max(0, +(foe.hold - dt).toFixed(2)); continue; }
     let brain = brains.get(id); if (!brain) brains.set(id, brain = {});
-    const hit = (foe.kind === "guard" ? guard : zombie)(world, id, foe, brain);
+    if (Object.values(h).some((x) => x.caught === id)) continue;   // busy holding someone
+    const open = (k) => !h[k]?.caught && !(brain.ignore?.[k] > Date.now());
+    const hit = (foe.kind === "guard" ? guard : zombie)({ ...world, heroes: world.heroes.filter((x) => open(x.id)), sounds: sounds.filter((x) => open(x.by)) }, id, foe, brain);
     for (const [oid, o] of Object.entries(f)) { const gap = dist(foe, o); if (oid !== id && o.hp > 0 && gap > 0 && gap < 24) move(foe, foe.x + (foe.x - o.x) / gap * 24 * dt, foe.y + (foe.y - o.y) / gap * 24 * dt); }
     foe.x = +foe.x.toFixed(1); foe.y = +foe.y.toFixed(1);
-    if (hit && !(hitAt.get(id) > Date.now())) { hitAt.set(id, Date.now() + 1400); h[hit].hp = Math.max(0, h[hit].hp - (h[hit].line > 0 ? 2 : 8)); c[`${NS}/fx/${fxN % 24}`] = { n: `${Date.now()}_${fxN++}`, type: "bite", x: pos[hit].x, y: pos[hit].y, tx: pos[hit].x, ty: pos[hit].y }; }
+    if (hit && !(h[hit].line > 0)) { h[hit].caught = id; caughtAt.set(hit, Date.now()); foe.alert = true; }   // a held line keeps them off
   }
 }
 let fxN = 0, goAt = 0, nextAt = 0;
@@ -268,6 +312,8 @@ function gmStep(dt) {
     const who = h[a.by], at = pos[a.by];
     if (a.k === "lever") { if (inPlay(who) && at) { const change = flip(NS, cells(), a.to, at, [...Object.keys(h).filter((id) => !h[id].out).map((id) => pos[id]), ...Object.values(f).filter((x) => x.hp > 0)]); Object.assign(c, change); if (Object.keys(change).length) noises.push({ x: at.x, y: at.y, range: LOUD, by: a.by }); } continue; }
     if (!running || !who || !at || !inPlay(who)) continue;
+    if (a.k === "stealth") { if (who.caught) asked.add(a.by); continue; }
+    if (who.caught) continue;
     const foe = f[a.to];
     if (a.k !== "lineEnd") noises.push({ x: at.x, y: at.y, range: LOUD, by: a.by });
     if (a.k === "attack" && foe?.kind === "guard") Object.assign(brains.get(a.to) || {}, { last: { x: at.x, y: at.y }, look: 0 });   // a struck guard turns on them
@@ -382,6 +428,16 @@ function drawWords() {   // over each head, lifted clear of the others
     ctx.fillStyle = "#fff"; ctx.fillText(word, x + 4, y + 13); ctx.fillStyle = "#7dff8a"; ctx.fillText(done, x + 4, y + 13);
   }
 }
+let checkSeen, checkAt = -1e9;
+function drawCaught(hero, now) {
+  if (!hero) return;
+  if (checkSeen !== undefined && hero.checkN !== checkSeen) checkAt = now;
+  checkSeen = hero.checkN ?? 0;
+  const lines = hero.caught ? ["CAUGHT!", `Press SPACE: Stealth d20 ${hero.stealth < 0 ? "-" : "+"} ${Math.abs(hero.stealth || 0)} vs ${map.dc}`] : now - checkAt < 3000 ? ["Stealth check", hero.check] : null;
+  if (!lines) return;
+  px(W / 2 - 160, H / 2 - 50, 320, 90, "#000d"); ctx.textAlign = "center"; ctx.fillStyle = "#ffe27a";
+  ctx.font = "28px monospace"; ctx.fillText(lines[0], W / 2, H / 2 - 10); ctx.font = "13px monospace"; ctx.fillText(lines[1], W / 2, H / 2 + 22, 304);
+}
 let then = performance.now();
 function frame(now) {
   const dt = Math.min(0.1, (now - then) / 1000); then = now;
@@ -412,7 +468,7 @@ function frame(now) {
       hero(h, p.x, p.y, id === me ? my.face : pos[id].face, moving ? (now / 140 | 0) % 2 : 0);
       ctx.globalAlpha = 1;
       if (h.line > 0) { px(p.x + (pos[id].face < 0 ? -26 : 14), p.y - 16, 12, 32, "#aab6cc"); px(p.x + (pos[id].face < 0 ? -22 : 18), p.y - 10, 4, 20, h.trim); ring(p.x, p.y, 30, "#8fc8ff"); }
-      bar(p.x, p.y - 46, h.hp / HERO_HP, "#5be36a"); label(`${h.name}${h.hp > 0 ? "" : " (down)"}${GM && h.roll ? ` d20:${h.roll}` : ""}`, p.x, p.y + 24, id === me ? "#ffe27a" : "#fff");
+      bar(p.x, p.y - 46, h.hp / HERO_HP, "#5be36a"); label(`${h.name}${h.caught ? " (CAUGHT)" : h.hp > 0 ? "" : " (down)"}${GM && h.roll ? ` d20:${h.roll}` : ""}`, p.x, p.y + 24, id === me ? "#ffe27a" : "#fff");
     }
   }
   for (let i = effects.length - 1; i >= 0; i--) { const k = (now - effects[i].at) / 500; if (k > 1) effects.splice(i, 1); else drawEffect(effects[i], Math.max(0, k)); }
@@ -421,15 +477,16 @@ function frame(now) {
     px(W / 2 - 160, H / 2 - 50, 320, 90, "#000d"); ctx.textAlign = "center"; ctx.fillStyle = "#ffe27a";
     ctx.font = "34px monospace"; ctx.fillText(`d20: ${heroes[me].roll}`, W / 2, H / 2 - 8); ctx.font = "16px monospace"; ctx.fillText(`${tier().name} words and timing`, W / 2, H / 2 + 22);
   }
+  if (MAPPED && me) drawCaught(heroes[me], now);
   const hs = Object.values(heroes), fs = Object.values(foes);
   const inside = hs.filter((h) => !h.out);
   const over = MAPPED && hs.length && !inside.length ? "Everyone escaped!" : inside.length && inside.every((h) => h.hp <= 0) ? (MAPPED ? "The party was caught" : "The party has fallen") : !MAPPED && running && wave && fs.every((f) => f.hp <= 0) ? `Wave ${wave} cleared` : "";
   if (over) { px(0, H / 2 - 30, W, 56, "#000a"); ctx.font = "32px monospace"; ctx.textAlign = "center"; ctx.fillStyle = "#ffe27a"; ctx.fillText(over, W / 2, H / 2 + 9); }
   const mine = me && heroes[me], info = mine && CLASSES[mine.cls];
   $("status").textContent = (GM ? "GM · " : mine ? `${mine.name} · ` : "") + (running ? "Fight!" : "Waiting for the GM to start") + (wave ? ` · Wave ${wave}` : "") + (MAPPED && hs.length ? ` · Escaped ${hs.length - inside.length}/${hs.length}` : "") + (mine?.roll ? ` · d20 ${mine.roll}: ${tier().name}` : "") + (now < noteUntil ? ` · ${note}` : "");
-  $("help").textContent = !mine ? "" : mine.out ? "You escaped! Everyone must get out." : mine.hp <= 0 ? "You are down. A Healing Word can bring you back." : line ? "HOLD THE LINE: tap SPACE each time the marker is in the green" :
+  $("help").textContent = !mine ? "" : mine.caught ? "CAUGHT: press SPACE to make your Stealth check" : mine.out ? "You escaped! Everyone must get out." : mine.hp <= 0 ? "You are down. A Healing Word can bring you back." : line ? "HOLD THE LINE: tap SPACE each time the marker is in the green" :
     `Arrows: move · Type the word over a hostile: ${info.attack} · Hold SPACE, release in the green: ${info.support}${cooldown > 0 ? ` (ready in ${Math.ceil(cooldown)}s)` : ""}`;
-  if (inPlay(mine) && my && nearLever(cells(), my)) $("help").textContent = "Press ENTER to flip the lever";
+  if (inPlay(mine) && !mine.caught && my && nearLever(cells(), my)) $("help").textContent = "Press ENTER to flip the lever";
   const g = charge || line; $("gauge").style.visibility = g ? "visible" : "hidden";
   if (g) { const [a, b] = zone(), [green, mark] = $("gauge").children; green.style.left = a * 100 + "%"; green.style.width = (b - a) * 100 + "%"; mark.style.left = marker() * 100 + "%"; }
   requestAnimationFrame(frame);

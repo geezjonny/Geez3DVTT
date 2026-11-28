@@ -27,6 +27,10 @@
 - **Sneak and escape:** new `minigame2.html` (own table, `geez3d/minigame2`). GM sets map size, drags rectangular rooms,
   puts doors into walls, wires levers to doors, marks exits, places heroes, guards (two-click patrol with a vision cone)
   and zombies (follow the closest sound). Everyone must escape. Both pages share `js/minigame*.js` and `js/minigame.css`.
+- **Caught (`minigame2.html`):** a guard or zombie that reaches a hero holds them instead of doing damage. The player
+  presses Space for one Stealth check (d20 + sheet modifier, GM can type over it) against the GM's DC (default 12);
+  rolls itself after 8 seconds. Pass: that enemy ignores them for 3 seconds. Fail: back to their start. A fighter holding
+  the line cannot be caught. The headless test covers both results but does not check the position after a fail.
 - Headless tests passed for both pages. Left: try hand drawing, real keyboards, separate computers and several players on
   `minigame2.html`. There is no quiet-walk key.
 
